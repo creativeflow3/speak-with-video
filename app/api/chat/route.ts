@@ -30,7 +30,12 @@ function sseEvent(event: string, data: unknown): string {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as Partial<ChatRequestBody>;
+  let body: Partial<ChatRequestBody>;
+  try {
+    body = (await request.json()) as Partial<ChatRequestBody>;
+  } catch {
+    return new Response(JSON.stringify({ error: "Request body must be valid JSON" }), { status: 400 });
+  }
   if (!body.query) {
     return new Response(JSON.stringify({ error: "query is required" }), { status: 400 });
   }
