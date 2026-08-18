@@ -3,9 +3,15 @@
 import { useState } from "react";
 
 const LANGUAGES = [
-  { code: "es", label: "Spanish" },
-  { code: "pt", label: "Portuguese" },
+  { code: "es", native: "Español" },
+  { code: "pt", native: "Português" },
 ];
+
+const FOCUS_RING =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
+const ACCENT_BUTTON = `rounded-lg bg-accent px-4 py-2 text-sm font-mono font-semibold uppercase tracking-wide text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-50 ${FOCUS_RING}`;
+const FIELD_LABEL = "font-mono text-[11px] uppercase tracking-widest text-muted";
+const PANEL = "rounded-2xl border border-line bg-surface p-5";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -56,56 +62,93 @@ function IngestForm() {
 
       if (!res.ok) {
         setStatus("error");
-        setMessage(data.error ?? "Ingestion failed");
+        setMessage(data.error ?? "That video couldn't be added.");
         return;
       }
 
       if (data.status === "already_ingested") {
         setStatus("success");
-        setMessage(`Already ingested: "${data.video?.title ?? youtubeUrl}"`);
+        setMessage(`Already added: "${data.video?.title ?? youtubeUrl}"`);
         return;
       }
 
       setStatus("success");
-      setMessage(`Ingested "${data.title}" — ${data.chunkCount} chunks indexed.`);
+      setMessage(`Added "${data.title}" — ${data.chunkCount} phrases indexed.`);
       setYoutubeUrl("");
     } catch {
       setStatus("error");
-      setMessage("Network error while ingesting video");
+      setMessage("Network error — the video wasn't added. Try again.");
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-lg border p-4">
-      <h2 className="text-lg font-semibold">Ingest a video</h2>
-      <input
-        type="text"
-        placeholder="https://www.youtube.com/watch?v=..."
-        value={youtubeUrl}
-        onChange={(e) => setYoutubeUrl(e.target.value)}
-        required
-        className="rounded border px-3 py-2"
-      />
-      <select
-        value={language}
-        onChange={(e) => setLanguage(e.target.value)}
-        className="rounded border px-3 py-2"
-      >
-        {LANGUAGES.map((l) => (
-          <option key={l.code} value={l.code}>
-            {l.label}
-          </option>
-        ))}
-      </select>
-      <button
-        type="submit"
-        disabled={status === "loading"}
-        className="rounded bg-black px-4 py-2 text-white disabled:opacity-50"
-      >
-        {status === "loading" ? "Ingesting…" : "Ingest video"}
+    <form onSubmit={handleSubmit} className={`flex flex-col gap-4 lg:h-fit ${PANEL}`}>
+      <div>
+        <h2 className="font-display text-xl italic text-ink">Add a video</h2>
+        <p className="mt-1 text-sm text-muted">
+          Drop in a YouTube link and we&apos;ll pull out every phrase.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="youtube-url" className={FIELD_LABEL}>
+          YouTube URL
+        </label>
+        <div className="relative">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-accent"
+          >
+            ▶
+          </span>
+          <input
+            id="youtube-url"
+            type="text"
+            placeholder="https://www.youtube.com/watch?v=..."
+            value={youtubeUrl}
+            onChange={(e) => setYoutubeUrl(e.target.value)}
+            required
+            className={`w-full rounded-lg border border-line bg-surface py-2 pl-9 pr-3 text-sm text-ink placeholder:text-muted focus:border-ink ${FOCUS_RING}`}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <span className={FIELD_LABEL}>Language</span>
+        <div className="flex gap-2">
+          {LANGUAGES.map((l) => (
+            <button
+              key={l.code}
+              type="button"
+              onClick={() => setLanguage(l.code)}
+              aria-pressed={language === l.code}
+              className={`flex-1 rounded-full border px-3 py-2 text-sm font-medium transition-colors ${FOCUS_RING} ${
+                language === l.code
+                  ? "border-ink bg-ink text-canvas"
+                  : "border-line bg-surface text-muted hover:border-ink hover:text-ink"
+              }`}
+            >
+              {l.native}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <button type="submit" disabled={status === "loading"} className={ACCENT_BUTTON}>
+        {status === "loading" ? "Adding…" : "Add video"}
       </button>
+
       {message && (
-        <p className={status === "error" ? "text-red-600" : "text-green-700"}>{message}</p>
+        <p
+          role="status"
+          className={`rounded-md border px-3 py-2 text-sm ${
+            status === "error"
+              ? "border-danger/30 bg-danger/5 text-danger"
+              : "border-success/30 bg-success/5 text-success"
+          }`}
+        >
+          {message}
+        </p>
       )}
     </form>
   );
@@ -165,6 +208,15 @@ function ChatPanel() {
           }
         }
       }
+    } catch {
+      setMessages((prev) => {
+        const next = [...prev];
+        next[next.length - 1] = {
+          role: "assistant",
+          content: "Something went wrong reaching the server. Try sending that again.",
+        };
+        return next;
+      });
     } finally {
       setLoading(false);
     }
@@ -182,38 +234,64 @@ function ChatPanel() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-3 rounded-lg border p-4">
-      <h2 className="text-lg font-semibold">Search &amp; chat</h2>
-      <div className="flex-1 space-y-3 overflow-y-auto">
-        {messages.map((m, i) => (
-          <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
-            <p className="inline-block whitespace-pre-wrap rounded bg-gray-100 px-3 py-2">
-              {m.content}
+    <div className={`flex flex-1 flex-col gap-4 lg:min-h-[520px] ${PANEL}`}>
+      <div>
+        <h2 className="font-display text-xl italic text-ink">Find a phrase</h2>
+        <p className="mt-1 text-sm text-muted">
+          Ask how something is really said — we&apos;ll pull it from the videos you&apos;ve
+          added.
+        </p>
+      </div>
+
+      <div className="flex-1 overflow-y-auto rounded-lg border border-line bg-canvas/40 p-3">
+        {messages.length === 0 ? (
+          <div className="flex h-full items-center justify-center px-6 text-center">
+            <p className="max-w-xs text-sm text-muted">
+              Try asking{" "}
+              <span className="font-mono text-ink">&ldquo;vale la pena&rdquo;</span> — see how
+              it&apos;s actually used.
             </p>
           </div>
-        ))}
+        ) : (
+          <div className="space-y-3">
+            {messages.map((m, i) => (
+              <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div
+                  className={`max-w-[85%] rounded-2xl px-3 py-2 ${
+                    m.role === "user"
+                      ? "rounded-br-sm bg-ink text-canvas"
+                      : "rounded-bl-sm border border-line bg-surface text-ink"
+                  }`}
+                >
+                  <span className="mb-1 block font-mono text-[10px] uppercase tracking-widest opacity-60">
+                    {m.role === "user" ? "You" : "Guide"}
+                  </span>
+                  <p className="whitespace-pre-wrap text-sm">{m.content}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
       {ankiCsv && (
         <button
           onClick={downloadCsv}
-          className="self-start rounded bg-green-700 px-3 py-1.5 text-sm text-white"
+          className={`self-start rounded-full bg-secondary px-3 py-1.5 text-xs font-mono font-semibold uppercase tracking-wide text-secondary-ink transition-opacity hover:opacity-90 ${FOCUS_RING}`}
         >
-          Download Anki CSV ({ankiCsv.cardCount} cards)
+          ↓ Export {ankiCsv.cardCount} cards to Anki
         </button>
       )}
+
       <form onSubmit={sendMessage} className="flex gap-2">
         <input
           type="text"
           placeholder='Try: "vale la pena"'
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          className="flex-1 rounded border px-3 py-2"
+          className={`flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-ink ${FOCUS_RING}`}
         />
-        <button
-          type="submit"
-          disabled={loading}
-          className="rounded bg-black px-4 py-2 text-white disabled:opacity-50"
-        >
+        <button type="submit" disabled={loading} className={ACCENT_BUTTON}>
           {loading ? "…" : "Send"}
         </button>
       </form>
@@ -223,10 +301,26 @@ function ChatPanel() {
 
 export default function Home() {
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
-      <h1 className="text-2xl font-bold">Speak With Video</h1>
-      <IngestForm />
-      <ChatPanel />
-    </main>
+    <div className="flex min-h-full flex-1 flex-col bg-canvas text-ink">
+      <header className="mx-auto w-full max-w-5xl px-6 pt-10">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted">
+          Real phrases, real videos
+        </p>
+        <h1 className="mt-2 font-display text-4xl italic text-ink sm:text-5xl">
+          Speak With Video
+        </h1>
+        <p className="mt-2 max-w-md text-sm text-muted">
+          Paste a video, then ask how a phrase actually gets used — straight from the
+          transcript.
+        </p>
+      </header>
+
+      <div className="tick-rail mx-auto mt-8 w-full max-w-5xl px-6" />
+
+      <main className="mx-auto grid w-full max-w-5xl flex-1 items-start gap-6 p-6 lg:grid-cols-[320px_1fr]">
+        <IngestForm />
+        <ChatPanel />
+      </main>
+    </div>
   );
 }

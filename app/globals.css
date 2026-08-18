@@ -1,26 +1,82 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --canvas: #f5f6f3;
+  --surface: #ffffff;
+  --ink: #171b20;
+  --muted: #5b6169;
+  --line: rgba(23, 27, 32, 0.14);
+  --accent: #e3a23c;
+  --accent-ink: #171b20;
+  --secondary: #146b65;
+  --secondary-ink: #f5f6f3;
+  --danger: #b23a28;
+  --success: #2e7d4f;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --canvas: #14181d;
+    --surface: #1c2128;
+    --ink: #f0f1ed;
+    --muted: #9aa0a6;
+    --line: rgba(240, 241, 237, 0.14);
+    --accent: #f0b65c;
+    --accent-ink: #14181d;
+    --secondary: #4fbdb3;
+    --secondary-ink: #14181d;
+    --danger: #e2624b;
+    --success: #4caf74;
   }
 }
 
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-secondary: var(--secondary);
+  --color-secondary-ink: var(--secondary-ink);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fraunces);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Scrubber-rail divider: a row of timeline ticks with one highlighted
+   frame, standing in for "the moment you found in the video." */
+.tick-rail {
+  height: 10px;
+  position: relative;
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--line) 0,
+    var(--line) 1px,
+    transparent 1px,
+    transparent 10px
+  );
+  background-position: bottom left;
+  background-repeat: repeat-x;
+  background-size: 100% 6px;
+}
+
+.tick-rail::after {
+  content: "";
+  position: absolute;
+  left: 64%;
+  bottom: 0;
+  width: 2px;
+  height: 10px;
+  border-radius: 1px;
+  background: var(--accent);
 }
