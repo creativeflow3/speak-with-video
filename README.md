@@ -84,3 +84,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 | `npm run db:generate` | Generate a new Drizzle migration |
 | `npm run db:migrate` | Apply Drizzle migrations |
 | `npm run setup:pinecone` | Create/configure the Pinecone index |
+
+## License
+
+[MIT](LICENSE)
