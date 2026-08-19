@@ -42,6 +42,3 @@ next-env.d.ts
 
 # workspace
 speak-with-video.code-workspace
-
-# mcp
-.mcp.json

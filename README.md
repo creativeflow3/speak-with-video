@@ -71,6 +71,13 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Claude Code Tooling
+
+This repo is set up to work with [Claude Code](https://claude.com/product/claude-code):
+
+- **MCP** — [`.mcp.json`](.mcp.json) configures the [context7](https://context7.com) server, which gives Claude up-to-date library/framework documentation lookups instead of relying on training data. Its API key is read from the `CONTEXT7_API_KEY` environment variable (set in `.claude/settings.local.json`, which is gitignored) rather than being committed.
+- **Skills** — [`.claude/skills/frontend-design`](.claude/skills/frontend-design/SKILL.md) guides Claude toward distinctive, intentional UI decisions (palette, typography, layout) instead of templated defaults when building or reshaping frontend work in this repo.
+
 ## Scripts
 
 | Command | Description |
