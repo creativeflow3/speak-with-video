@@ -22,13 +22,17 @@ const PILL_STATE_CLASSES = {
   inactive: "border-line bg-surface text-muted hover:border-ink hover:text-ink",
 };
 
-export function Button({ variant = "accent", active, className, ...props }: ButtonProps) {
+/** Shared class string so non-<button> elements (e.g. a Login/Signup <a>) can match Button's look. */
+export function buttonClasses(variant: ButtonVariant = "accent", active?: boolean, className?: string) {
   const pillState = variant === "pill" ? PILL_STATE_CLASSES[active ? "active" : "inactive"] : "";
+  return `${VARIANT_CLASSES[variant]} ${pillState} ${FOCUS_RING} ${className ?? ""}`.trim();
+}
 
+export function Button({ variant = "accent", active, className, ...props }: ButtonProps) {
   return (
     <button
       aria-pressed={variant === "pill" ? active : undefined}
-      className={`${VARIANT_CLASSES[variant]} ${pillState} ${FOCUS_RING} ${className ?? ""}`}
+      className={buttonClasses(variant, active, className)}
       {...props}
     />
   );
