@@ -4,6 +4,8 @@ export const videoStatus = pgEnum("video_status", ["pending", "succeeded", "fail
 export const userRole = pgEnum("user_role", ["Admin", "User"]);
 export const videoVisibility = pgEnum("video_visibility", ["base", "private"]);
 
+export type UserRole = (typeof userRole.enumValues)[number];
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   auth0Sub: text("auth0_sub").notNull().unique(),

@@ -23,17 +23,14 @@ export class TranscriptApiError extends Error {
   }
 }
 
-/**
- * Fetch a transcript for a video, requesting creator captions in `language`
- * first and falling back to auto-generated captions in the same language.
- */
-export async function fetchTranscript(
+const MAX_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 1500;
+
+async function requestTranscript(
   videoIdOrUrl: string,
   language: string,
+  apiKey: string,
 ): Promise<TranscriptResult> {
-  const apiKey = process.env.TRANSCRIPTAPI_KEY;
-  if (!apiKey) throw new Error("TRANSCRIPTAPI_KEY is not set");
-
   const url = new URL(BASE_URL);
   url.searchParams.set("video_url", videoIdOrUrl);
   url.searchParams.set("send_metadata", "true");
@@ -65,4 +62,27 @@ export async function fetchTranscript(
     title: data.metadata?.title ?? null,
     channel: data.metadata?.author_name ?? null,
   };
+}
+
+/**
+ * Fetch a transcript for a video, requesting creator captions in `language`
+ * first and falling back to auto-generated captions in the same language.
+ * Retries on failure: transcriptapi.com can transiently report a video's
+ * captions as unavailable on the first request before they're cached.
+ */
+export async function fetchTranscript(
+  videoIdOrUrl: string,
+  language: string,
+): Promise<TranscriptResult> {
+  const apiKey = process.env.TRANSCRIPTAPI_KEY;
+  if (!apiKey) throw new Error("TRANSCRIPTAPI_KEY is not set");
+
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await requestTranscript(videoIdOrUrl, language, apiKey);
+    } catch (err) {
+      if (!(err instanceof TranscriptApiError) || attempt === MAX_ATTEMPTS) throw err;
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+  }
 }

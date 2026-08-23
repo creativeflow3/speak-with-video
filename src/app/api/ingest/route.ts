@@ -8,6 +8,7 @@ import { chunkTranscript } from "@/lib/transcript/chunk";
 import { embedDocuments } from "@/lib/voyage";
 import { upsertChunks, type ChunkMetadata } from "@/lib/pinecone";
 import { log } from "@/lib/logger";
+import { requireSession } from "@/lib/authz";
 
 interface IngestRequestBody {
   youtubeUrl: string;
@@ -17,6 +18,9 @@ interface IngestRequestBody {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   let body: Partial<IngestRequestBody>;
   try {
     body = (await request.json()) as Partial<IngestRequestBody>;
