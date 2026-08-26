@@ -49,6 +49,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: "already_ingested", video: existing });
   }
 
+  // Ownership is set once, at creation — a retry of an existing (failed/pending) video
+  // must not silently reassign it to whoever happens to trigger the retry.
+  const ownerId = existing?.ownerId ?? auth.id;
+  const visibility = existing?.visibility ?? (auth.role === "Admin" ? "base" : "private");
+
   log("ingest_started", { videoId, language: body.language });
 
   if (existing) {
@@ -62,6 +67,8 @@ export async function POST(request: Request) {
       youtubeUrl,
       language: body.language,
       status: "pending",
+      ownerId,
+      visibility,
     });
   }
 
@@ -108,6 +115,8 @@ export async function POST(request: Request) {
           chunkIndex: chunk.chunkIndex,
           startTime: chunk.startTime,
           endTime: chunk.endTime,
+          ownerId,
+          visibility,
         };
         return { vector: vectors[i], metadata };
       }),

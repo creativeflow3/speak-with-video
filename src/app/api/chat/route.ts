@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import { z } from "zod";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { anthropic, CHAT_MODEL } from "@/lib/anthropic";
@@ -6,6 +7,7 @@ import { queryChunks } from "@/lib/pinecone";
 import { generateAnkiCsv, type AnkiCard } from "@/lib/anki/csv";
 import { deepLinkUrl, parseVideoId } from "@/lib/youtube";
 import { log } from "@/lib/logger";
+import { requireSession } from "@/lib/authz";
 
 const SYSTEM_PROMPT = `You are a language-learning research assistant. The user is building a personal database of YouTube video transcripts (currently Spanish and Portuguese) and wants to see how words or phrases are actually used by native speakers.
 
@@ -30,6 +32,9 @@ function sseEvent(event: string, data: unknown): string {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireSession();
+  if (auth instanceof NextResponse) return auth;
+
   let body: Partial<ChatRequestBody>;
   try {
     body = (await request.json()) as Partial<ChatRequestBody>;
@@ -56,7 +61,7 @@ export async function POST(request: Request) {
     run: async ({ query, language, topK }) => {
       const start = Date.now();
       const vector = await embedQuery(query);
-      const matches = await queryChunks(vector, { topK, language });
+      const matches = await queryChunks(vector, { userId: auth.id, topK, language });
       log("rag_query", { query, language, resultCount: matches.length, ms: Date.now() - start });
 
       if (matches.length === 0) {

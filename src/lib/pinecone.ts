@@ -12,6 +12,8 @@ export interface ChunkMetadata extends RecordMetadata {
   chunkIndex: number;
   startTime: number;
   endTime: number;
+  ownerId: string;
+  visibility: "base" | "private";
 }
 
 const apiKey = process.env.PINECONE_API_KEY;
@@ -55,14 +57,22 @@ export interface RagMatch {
 
 export async function queryChunks(
   vector: number[],
-  opts: { topK?: number; language?: string } = {},
+  opts: { userId: string; topK?: number; language?: string },
 ): Promise<RagMatch[]> {
   const index = getIndex();
+
+  // Pinecone ANDs sibling top-level filter keys implicitly, so `language` just sits
+  // alongside `$or` rather than needing an explicit `$and`.
+  const filter = {
+    $or: [{ visibility: { $eq: "base" } }, { ownerId: { $eq: opts.userId } }],
+    ...(opts.language && { language: { $eq: opts.language } }),
+  };
+
   const result = await index.query({
     vector,
     topK: opts.topK ?? 5,
     includeMetadata: true,
-    filter: opts.language ? { language: opts.language } : undefined,
+    filter,
   });
 
   return result.matches
