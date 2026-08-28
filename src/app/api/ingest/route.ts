@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { videos, transcriptApiUsage } from "@/db/schema";
-import { parseVideoId, fetchOEmbed, youtubeUrlFromId } from "@/lib/youtube";
+import { parseVideoId, isYouTubeUrl, fetchOEmbed, youtubeUrlFromId } from "@/lib/youtube";
 import { fetchTranscript, TranscriptApiError } from "@/lib/transcript/transcriptapi";
 import { chunkTranscript } from "@/lib/transcript/chunk";
+import { checkTranscriptLanguage, sampleForLanguageCheck } from "@/lib/transcript/language";
+import { isSupportedLanguage } from "@/lib/languages";
 import { embedDocuments } from "@/lib/voyage";
 import { upsertChunks, type ChunkMetadata } from "@/lib/pinecone";
 import { log } from "@/lib/logger";
@@ -15,6 +17,12 @@ interface IngestRequestBody {
   language: string;
   titleOverride?: string;
   channelOverride?: string;
+}
+
+async function failIngest(videoId: string, reason: string, status: number) {
+  await db.update(videos).set({ status: "failed", failureReason: reason }).where(eq(videos.videoId, videoId));
+  log("ingest_failed", { videoId, reason });
+  return NextResponse.json({ error: reason }, { status });
 }
 
 export async function POST(request: Request) {
@@ -33,6 +41,14 @@ export async function POST(request: Request) {
       { error: "youtubeUrl and language are required" },
       { status: 400 },
     );
+  }
+
+  if (!isSupportedLanguage(body.language)) {
+    return NextResponse.json({ error: `Unsupported language "${body.language}"` }, { status: 400 });
+  }
+
+  if (!isYouTubeUrl(body.youtubeUrl)) {
+    return NextResponse.json({ error: "Only YouTube URLs are supported" }, { status: 400 });
   }
 
   const videoId = parseVideoId(body.youtubeUrl);
@@ -79,9 +95,16 @@ export async function POST(request: Request) {
   } catch (err) {
     await db.insert(transcriptApiUsage).values({ videoId, succeeded: false });
     const reason = err instanceof TranscriptApiError ? err.message : "Unknown transcript fetch error";
-    await db.update(videos).set({ status: "failed", failureReason: reason }).where(eq(videos.videoId, videoId));
-    log("ingest_failed", { videoId, reason });
-    return NextResponse.json({ error: reason }, { status: 422 });
+    return failIngest(videoId, reason, 422);
+  }
+
+  const languageCheck = checkTranscriptLanguage(sampleForLanguageCheck(transcript.segments), body.language);
+  if (!languageCheck.matches) {
+    return failIngest(
+      videoId,
+      `Transcript appears to be in "${languageCheck.detected}", not the requested "${body.language}"`,
+      422,
+    );
   }
 
   try {
@@ -95,10 +118,7 @@ export async function POST(request: Request) {
 
     const chunks = chunkTranscript(transcript.segments);
     if (chunks.length === 0) {
-      const reason = "Transcript was empty after chunking";
-      await db.update(videos).set({ status: "failed", failureReason: reason }).where(eq(videos.videoId, videoId));
-      log("ingest_failed", { videoId, reason });
-      return NextResponse.json({ error: reason }, { status: 422 });
+      return failIngest(videoId, "Transcript was empty after chunking", 422);
     }
 
     const vectors = await embedDocuments(chunks.map((c) => c.text));
@@ -132,8 +152,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: "succeeded", videoId, chunkCount: chunks.length, title, channel });
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Unknown error while processing transcript";
-    await db.update(videos).set({ status: "failed", failureReason: reason }).where(eq(videos.videoId, videoId));
-    log("ingest_failed", { videoId, reason });
-    return NextResponse.json({ error: reason }, { status: 500 });
+    return failIngest(videoId, reason, 500);
   }
 }

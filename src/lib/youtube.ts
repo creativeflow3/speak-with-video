@@ -1,20 +1,38 @@
+const VIDEO_ID_RE = /^[\w-]{11}$/;
+const YOUTUBE_HOSTNAMES = new Set(["youtube.com", "www.youtube.com", "m.youtube.com"]);
+
+function isYouTubeHostname(hostname: string): boolean {
+  return hostname === "youtu.be" || YOUTUBE_HOSTNAMES.has(hostname);
+}
+
+/** True for a bare 11-character video ID or a URL on a real YouTube hostname (exact match, not just a suffix). */
+export function isYouTubeUrl(input: string): boolean {
+  const trimmed = input.trim();
+  if (VIDEO_ID_RE.test(trimmed)) return true;
+  try {
+    return isYouTubeHostname(new URL(trimmed).hostname);
+  } catch {
+    return false;
+  }
+}
+
 /** Extract the 11-character YouTube video ID from any common URL shape, or a bare ID. */
 export function parseVideoId(input: string): string | null {
   const trimmed = input.trim();
 
   // Bare video ID
-  if (/^[\w-]{11}$/.test(trimmed)) return trimmed;
+  if (VIDEO_ID_RE.test(trimmed)) return trimmed;
 
   try {
     const url = new URL(trimmed);
     if (url.hostname === "youtu.be") {
       const id = url.pathname.slice(1);
-      return /^[\w-]{11}$/.test(id) ? id : null;
+      return VIDEO_ID_RE.test(id) ? id : null;
     }
-    if (url.hostname.endsWith("youtube.com")) {
+    if (YOUTUBE_HOSTNAMES.has(url.hostname)) {
       if (url.pathname === "/watch") {
         const id = url.searchParams.get("v");
-        return id && /^[\w-]{11}$/.test(id) ? id : null;
+        return id && VIDEO_ID_RE.test(id) ? id : null;
       }
       const shortsMatch = url.pathname.match(/^\/(?:shorts|embed)\/([\w-]{11})/);
       if (shortsMatch) return shortsMatch[1];

@@ -4,11 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { FOCUS_RING } from "@/components/ui/styles";
-
-const LANGUAGES = [
-  { code: "es", native: "Español" },
-  { code: "pt", native: "Português" },
-];
+import { SUPPORTED_LANGUAGES } from "@/lib/languages";
 
 const FIELD_LABEL = "font-mono text-[11px] uppercase tracking-widest text-muted";
 
@@ -87,7 +83,7 @@ export function IngestForm() {
       <div className="flex flex-col gap-1.5">
         <span className={FIELD_LABEL}>Language</span>
         <div className="flex gap-2">
-          {LANGUAGES.map((l) => (
+          {SUPPORTED_LANGUAGES.map((l) => (
             <Button
               key={l.code}
               type="button"
