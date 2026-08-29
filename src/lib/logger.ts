@@ -4,7 +4,9 @@ type LogEvent =
   | "ingest_failed"
   | "rag_query"
   | "tool_call"
-  | "anki_export";
+  | "anki_export"
+  | "list_add"
+  | "list_download";
 
 export function log(event: LogEvent, data: Record<string, unknown> = {}) {
   console.log(

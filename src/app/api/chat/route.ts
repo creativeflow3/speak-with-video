@@ -5,6 +5,7 @@ import { anthropic, CHAT_MODEL } from "@/lib/anthropic";
 import { embedQuery } from "@/lib/voyage";
 import { queryChunks } from "@/lib/pinecone";
 import { generateAnkiCsv, type AnkiCard } from "@/lib/anki/csv";
+import { addListItem, downloadAndClearList } from "@/lib/anki-list/items";
 import { deepLinkUrl, parseVideoId } from "@/lib/youtube";
 import { log } from "@/lib/logger";
 import { requireSession } from "@/lib/authz";
@@ -13,7 +14,9 @@ const SYSTEM_PROMPT = `You are a language-learning research assistant. The user 
 
 Tools:
 - search_rag: searches the ingested transcript database for real usage examples of a word or phrase. Call it whenever the user asks about a specific word/phrase, wants example usage, or wants insights/patterns across multiple examples. Do not call it for general conversation unrelated to phrase usage. If it returns no results, say so plainly rather than inventing an example.
-- generate_anki_csv: call this when the user asks to export flashcards/Anki cards, passing the front/back (and optional notes) for each card. The app delivers the actual downloadable file — after calling the tool, just confirm to the user that the cards were generated. Never write CSV content yourself in your reply.
+- generate_anki_csv: call this when the user asks to export flashcards/Anki cards for this conversation only (a one-off export), passing the front/back (and optional notes) for each card. The app delivers the actual downloadable file — after calling the tool, just confirm to the user that the cards were generated. Never write CSV content yourself in your reply.
+- add_to_list: call this when the user asks to add a word/term/phrase to their (persistent, running) vocabulary list, e.g. "add vale la pena to my list". Confirm the addition briefly after calling it.
+- download_list: call this when the user asks to download/export their saved vocabulary list. The app delivers the downloadable file and then clears the list. If the list is empty, tell the user instead of calling this tool.
 
 When citing a search_rag result, include the video title and the YouTube link from the result so the user can watch the original context.`;
 
@@ -47,7 +50,7 @@ export async function POST(request: Request) {
 
   const history = (body.messages ?? []).map((m) => ({ role: m.role, content: m.content }));
 
-  let pendingAnkiExport: { csv: string; cardCount: number } | null = null;
+  const pendingExports: { event: string; data: { csv: string; cardCount: number } }[] = [];
 
   const searchRag = betaZodTool({
     name: "search_rag",
@@ -94,9 +97,41 @@ export async function POST(request: Request) {
     }),
     run: async ({ cards }) => {
       const csv = generateAnkiCsv(cards as AnkiCard[]);
-      pendingAnkiExport = { csv, cardCount: cards.length };
+      pendingExports.push({ event: "anki_csv", data: { csv, cardCount: cards.length } });
       log("anki_export", { cardCount: cards.length });
       return `Generated ${cards.length} card${cards.length === 1 ? "" : "s"}.`;
+    },
+  });
+
+  const addToListTool = betaZodTool({
+    name: "add_to_list",
+    description: "Add a word or phrase to the user's persistent vocabulary list.",
+    inputSchema: z.object({
+      front: z.string(),
+      back: z.string(),
+      notes: z.string().optional(),
+    }),
+    run: async ({ front, back, notes }) => {
+      await addListItem(auth.id, { front, back, notes });
+      log("list_add", { userId: auth.id });
+      return `Added "${front}" to the list.`;
+    },
+  });
+
+  const downloadListTool = betaZodTool({
+    name: "download_list",
+    description: "Export the user's saved vocabulary list as a CSV and clear the list.",
+    inputSchema: z.object({}),
+    run: async () => {
+      const items = await downloadAndClearList(auth.id);
+      if (items.length === 0) {
+        return "The list is empty — there's nothing to download.";
+      }
+
+      const csv = generateAnkiCsv(items);
+      pendingExports.push({ event: "list_csv", data: { csv, cardCount: items.length } });
+      log("list_download", { userId: auth.id, cardCount: items.length });
+      return `Exported and cleared ${items.length} saved item${items.length === 1 ? "" : "s"}.`;
     },
   });
 
@@ -111,7 +146,7 @@ export async function POST(request: Request) {
           model: CHAT_MODEL,
           max_tokens: 4096,
           system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-          tools: [searchRag, generateAnkiCsvTool],
+          tools: [searchRag, generateAnkiCsvTool, addToListTool, downloadListTool],
           messages: [...history, { role: "user", content: body.query! }],
           stream: true,
         });
@@ -123,9 +158,9 @@ export async function POST(request: Request) {
             }
           }
 
-          if (pendingAnkiExport) {
-            enqueue(sseEvent("anki_csv", pendingAnkiExport));
-            pendingAnkiExport = null;
+          while (pendingExports.length > 0) {
+            const { event, data } = pendingExports.shift()!;
+            enqueue(sseEvent(event, data));
           }
         }
 

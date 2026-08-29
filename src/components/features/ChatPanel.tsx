@@ -7,11 +7,21 @@ import { FOCUS_RING } from "@/components/ui/styles";
 import { parseSseChunk } from "@/lib/utils";
 import type { ChatMessage } from "@/types";
 
+interface CsvExport {
+  csv: string;
+  cardCount: number;
+}
+
+const CSV_EXPORT_CONFIG: Record<string, { filename: string; label: (cardCount: number) => string }> = {
+  anki_csv: { filename: "anki-export.csv", label: (n) => `↓ Export ${n} cards to Anki` },
+  list_csv: { filename: "vocab-list.csv", label: (n) => `↓ Download list (${n})` },
+};
+
 export function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [ankiCsv, setAnkiCsv] = useState<{ csv: string; cardCount: number } | null>(null);
+  const [csvExports, setCsvExports] = useState<Record<string, CsvExport>>({});
 
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
@@ -22,7 +32,7 @@ export function ChatPanel() {
     setMessages((prev) => [...prev, { role: "user", content: query }]);
     setInput("");
     setLoading(true);
-    setAnkiCsv(null);
+    setCsvExports({});
 
     let assistantText = "";
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
@@ -55,8 +65,9 @@ export function ChatPanel() {
                 next[next.length - 1] = { role: "assistant", content: assistantText };
                 return next;
               });
-            } else if (frame.event === "anki_csv") {
-              setAnkiCsv(JSON.parse(frame.data));
+            } else if (frame.event in CSV_EXPORT_CONFIG) {
+              const data = JSON.parse(frame.data) as CsvExport;
+              setCsvExports((prev) => ({ ...prev, [frame.event]: data }));
             }
           }
         }
@@ -75,13 +86,12 @@ export function ChatPanel() {
     }
   }
 
-  function downloadCsv() {
-    if (!ankiCsv) return;
-    const blob = new Blob([ankiCsv.csv], { type: "text/csv" });
+  function downloadCsv(csv: string, filename: string) {
+    const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "anki-export.csv";
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -127,10 +137,19 @@ export function ChatPanel() {
         )}
       </div>
 
-      {ankiCsv && (
-        <Button variant="secondary" onClick={downloadCsv} className="self-start">
-          ↓ Export {ankiCsv.cardCount} cards to Anki
-        </Button>
+      {Object.keys(csvExports).length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(csvExports).map(([event, data]) => (
+            <Button
+              key={event}
+              variant="secondary"
+              onClick={() => downloadCsv(data.csv, CSV_EXPORT_CONFIG[event].filename)}
+              className="self-start"
+            >
+              {CSV_EXPORT_CONFIG[event].label(data.cardCount)}
+            </Button>
+          ))}
+        </div>
       )}
 
       <form onSubmit={sendMessage} className="flex gap-2">

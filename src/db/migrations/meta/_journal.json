@@ -15,6 +15,13 @@
       "when": 1787434250916,
       "tag": "0001_sloppy_nightshade",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788025076906,
+      "tag": "0002_wakeful_trauma",
+      "breakpoints": true
     }
   ]
 }
