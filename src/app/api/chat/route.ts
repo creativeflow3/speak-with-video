@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
-import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { anthropic, CHAT_MODEL } from "@/lib/anthropic";
-import { embedQuery } from "@/lib/voyage";
-import { queryChunks } from "@/lib/pinecone";
-import { generateAnkiCsv, type AnkiCard } from "@/lib/anki/csv";
-import { addListItem, downloadAndClearList } from "@/lib/anki-list/items";
-import { deepLinkUrl, parseVideoId } from "@/lib/youtube";
-import { log } from "@/lib/logger";
 import { requireSession } from "@/lib/authz";
+import { searchRag } from "@/lib/tools/searchRag";
+import { generateAnkiCsvTool } from "@/lib/tools/generateAnkiCsvTool";
+import { addToListTool } from "@/lib/tools/addToListTool";
+import { downloadListTool } from "@/lib/tools/downloadListTool";
+import type { CsvExport } from "@/lib/tools/context";
 
 const SYSTEM_PROMPT = `You are a language-learning research assistant. The user is building a personal database of YouTube video transcripts (currently Spanish and Portuguese) and wants to see how words or phrases are actually used by native speakers.
 
@@ -50,90 +47,11 @@ export async function POST(request: Request) {
 
   const history = (body.messages ?? []).map((m) => ({ role: m.role, content: m.content }));
 
-  const pendingExports: { event: string; data: { csv: string; cardCount: number } }[] = [];
-
-  const searchRag = betaZodTool({
-    name: "search_rag",
-    description:
-      "Search the ingested YouTube transcript database for real example usage of a word or phrase.",
-    inputSchema: z.object({
-      query: z.string().describe("The word or phrase to search for, e.g. 'vale la pena'"),
-      language: z.string().optional().describe("Optional ISO language code filter, e.g. 'es'"),
-      topK: z.number().int().min(1).max(10).optional().describe("Number of results to return (default 5)"),
-    }),
-    run: async ({ query, language, topK }) => {
-      const start = Date.now();
-      const vector = await embedQuery(query);
-      const matches = await queryChunks(vector, { userId: auth.id, topK, language });
-      log("rag_query", { query, language, resultCount: matches.length, ms: Date.now() - start });
-
-      if (matches.length === 0) {
-        return "No matching examples were found in the ingested videos.";
-      }
-
-      return matches
-        .map((m, i) => {
-          const videoId = parseVideoId(m.youtubeUrl);
-          const link = videoId ? deepLinkUrl(videoId, m.startTime) : m.youtubeUrl;
-          return `${i + 1}. "${m.text}"\n   Video: ${m.videoTitle} (${m.channel})\n   Link: ${link}`;
-        })
-        .join("\n\n");
-    },
-  });
-
-  const generateAnkiCsvTool = betaZodTool({
-    name: "generate_anki_csv",
-    description: "Generate an Anki-importable CSV from a list of flashcards.",
-    inputSchema: z.object({
-      cards: z
-        .array(
-          z.object({
-            front: z.string(),
-            back: z.string(),
-            notes: z.string().optional(),
-          }),
-        )
-        .min(1),
-    }),
-    run: async ({ cards }) => {
-      const csv = generateAnkiCsv(cards as AnkiCard[]);
-      pendingExports.push({ event: "anki_csv", data: { csv, cardCount: cards.length } });
-      log("anki_export", { cardCount: cards.length });
-      return `Generated ${cards.length} card${cards.length === 1 ? "" : "s"}.`;
-    },
-  });
-
-  const addToListTool = betaZodTool({
-    name: "add_to_list",
-    description: "Add a word or phrase to the user's persistent vocabulary list.",
-    inputSchema: z.object({
-      front: z.string(),
-      back: z.string(),
-      notes: z.string().optional(),
-    }),
-    run: async ({ front, back, notes }) => {
-      await addListItem(auth.id, { front, back, notes });
-      log("list_add", { userId: auth.id });
-      return `Added "${front}" to the list.`;
-    },
-  });
-
-  const downloadListTool = betaZodTool({
-    name: "download_list",
-    description: "Export the user's saved vocabulary list as a CSV and clear the list.",
-    inputSchema: z.object({}),
-    run: async () => {
-      const items = await downloadAndClearList(auth.id);
-      if (items.length === 0) {
-        return "The list is empty — there's nothing to download.";
-      }
-
-      const csv = generateAnkiCsv(items);
-      pendingExports.push({ event: "list_csv", data: { csv, cardCount: items.length } });
-      log("list_download", { userId: auth.id, cardCount: items.length });
-      return `Exported and cleared ${items.length} saved item${items.length === 1 ? "" : "s"}.`;
-    },
-  });
+  const pendingExports: { event: string; data: CsvExport }[] = [];
+  const toolContext = {
+    userId: auth.id,
+    onExport: (event: string, data: CsvExport) => pendingExports.push({ event, data }),
+  };
 
   const encoder = new TextEncoder();
 
@@ -146,7 +64,12 @@ export async function POST(request: Request) {
           model: CHAT_MODEL,
           max_tokens: 4096,
           system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-          tools: [searchRag, generateAnkiCsvTool, addToListTool, downloadListTool],
+          tools: [
+            searchRag(toolContext),
+            generateAnkiCsvTool(toolContext),
+            addToListTool(toolContext),
+            downloadListTool(toolContext),
+          ],
           messages: [...history, { role: "user", content: body.query! }],
           stream: true,
         });
