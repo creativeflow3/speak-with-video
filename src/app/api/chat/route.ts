@@ -6,6 +6,7 @@ import { generateAnkiCsvTool } from "@/lib/tools/generateAnkiCsvTool";
 import { addToListTool } from "@/lib/tools/addToListTool";
 import { downloadListTool } from "@/lib/tools/downloadListTool";
 import type { CsvExport } from "@/lib/tools/context";
+import type { ChatRequestBody } from "@/types";
 
 const SYSTEM_PROMPT = `You are a language-learning research assistant. The user is building a personal database of YouTube video transcripts (currently Spanish and Portuguese) and wants to see how words or phrases are actually used by native speakers.
 
@@ -16,16 +17,6 @@ Tools:
 - download_list: call this when the user asks to download/export their saved vocabulary list. The app delivers the downloadable file and then clears the list. If the list is empty, tell the user instead of calling this tool.
 
 When citing a search_rag result, include the video title and the YouTube link from the result so the user can watch the original context.`;
-
-interface ChatRequestMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
-interface ChatRequestBody {
-  query: string;
-  messages?: ChatRequestMessage[];
-}
 
 function sseEvent(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -39,31 +30,47 @@ export async function POST(request: Request) {
   try {
     body = (await request.json()) as Partial<ChatRequestBody>;
   } catch {
-    return new Response(JSON.stringify({ error: "Request body must be valid JSON" }), { status: 400 });
+    return new Response(
+      JSON.stringify({ error: "Request body must be valid JSON" }),
+      { status: 400 },
+    );
   }
   if (!body.query) {
-    return new Response(JSON.stringify({ error: "query is required" }), { status: 400 });
+    return new Response(JSON.stringify({ error: "query is required" }), {
+      status: 400,
+    });
   }
 
-  const history = (body.messages ?? []).map((m) => ({ role: m.role, content: m.content }));
+  const history = (body.messages ?? []).map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
 
   const pendingExports: { event: string; data: CsvExport }[] = [];
   const toolContext = {
     userId: auth.id,
-    onExport: (event: string, data: CsvExport) => pendingExports.push({ event, data }),
+    onExport: (event: string, data: CsvExport) =>
+      pendingExports.push({ event, data }),
   };
 
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
     async start(controller) {
-      const enqueue = (chunk: string) => controller.enqueue(encoder.encode(chunk));
+      const enqueue = (chunk: string) =>
+        controller.enqueue(encoder.encode(chunk));
 
       try {
         const runner = anthropic.beta.messages.toolRunner({
           model: CHAT_MODEL,
           max_tokens: 4096,
-          system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+          system: [
+            {
+              type: "text",
+              text: SYSTEM_PROMPT,
+              cache_control: { type: "ephemeral" },
+            },
+          ],
           tools: [
             searchRag(toolContext),
             generateAnkiCsvTool(toolContext),
@@ -76,7 +83,10 @@ export async function POST(request: Request) {
 
         for await (const messageStream of runner) {
           for await (const event of messageStream) {
-            if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+            if (
+              event.type === "content_block_delta" &&
+              event.delta.type === "text_delta"
+            ) {
               enqueue(sseEvent("text", { text: event.delta.text }));
             }
           }
@@ -89,7 +99,11 @@ export async function POST(request: Request) {
 
         enqueue(sseEvent("done", {}));
       } catch (err) {
-        enqueue(sseEvent("error", { message: err instanceof Error ? err.message : "Unknown error" }));
+        enqueue(
+          sseEvent("error", {
+            message: err instanceof Error ? err.message : "Unknown error",
+          }),
+        );
       } finally {
         controller.close();
       }

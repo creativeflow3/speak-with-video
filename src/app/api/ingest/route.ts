@@ -2,25 +2,33 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { videos, transcriptApiUsage } from "@/db/schema";
-import { parseVideoId, isYouTubeUrl, fetchOEmbed, youtubeUrlFromId } from "@/lib/youtube";
-import { fetchTranscript, TranscriptApiError } from "@/lib/transcript/transcriptapi";
+import {
+  parseVideoId,
+  isYouTubeUrl,
+  fetchOEmbed,
+  youtubeUrlFromId,
+} from "@/lib/youtube";
+import {
+  fetchTranscript,
+  TranscriptApiError,
+} from "@/lib/transcript/transcriptapi";
 import { chunkTranscript } from "@/lib/transcript/chunk";
-import { checkTranscriptLanguage, sampleForLanguageCheck } from "@/lib/transcript/language";
+import {
+  checkTranscriptLanguage,
+  sampleForLanguageCheck,
+} from "@/lib/transcript/language";
 import { isSupportedLanguage } from "@/lib/languages";
 import { embedDocuments } from "@/lib/voyage";
 import { upsertChunks, type ChunkMetadata } from "@/lib/pinecone";
 import { log } from "@/lib/logger";
 import { requireSession } from "@/lib/authz";
-
-interface IngestRequestBody {
-  youtubeUrl: string;
-  language: string;
-  titleOverride?: string;
-  channelOverride?: string;
-}
+import type { IngestRequestBody } from "@/types";
 
 async function failIngest(videoId: string, reason: string, status: number) {
-  await db.update(videos).set({ status: "failed", failureReason: reason }).where(eq(videos.videoId, videoId));
+  await db
+    .update(videos)
+    .set({ status: "failed", failureReason: reason })
+    .where(eq(videos.videoId, videoId));
   log("ingest_failed", { videoId, reason });
   return NextResponse.json({ error: reason }, { status });
 }
@@ -33,7 +41,10 @@ export async function POST(request: Request) {
   try {
     body = (await request.json()) as Partial<IngestRequestBody>;
   } catch {
-    return NextResponse.json({ error: "Request body must be valid JSON" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Request body must be valid JSON" },
+      { status: 400 },
+    );
   }
 
   if (!body.youtubeUrl || !body.language) {
@@ -44,23 +55,36 @@ export async function POST(request: Request) {
   }
 
   if (!isSupportedLanguage(body.language)) {
-    return NextResponse.json({ error: `Unsupported language "${body.language}"` }, { status: 400 });
+    return NextResponse.json(
+      { error: `Unsupported language "${body.language}"` },
+      { status: 400 },
+    );
   }
 
   if (!isYouTubeUrl(body.youtubeUrl)) {
-    return NextResponse.json({ error: "Only YouTube URLs are supported" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Only YouTube URLs are supported" },
+      { status: 400 },
+    );
   }
 
   const videoId = parseVideoId(body.youtubeUrl);
   if (!videoId) {
-    return NextResponse.json({ error: "Could not parse a YouTube video ID from that URL" }, {
-      status: 400,
-    });
+    return NextResponse.json(
+      { error: "Could not parse a YouTube video ID from that URL" },
+      {
+        status: 400,
+      },
+    );
   }
 
   const youtubeUrl = youtubeUrlFromId(videoId);
 
-  const [existing] = await db.select().from(videos).where(eq(videos.videoId, videoId)).limit(1);
+  const [existing] = await db
+    .select()
+    .from(videos)
+    .where(eq(videos.videoId, videoId))
+    .limit(1);
   if (existing?.status === "succeeded") {
     return NextResponse.json({ status: "already_ingested", video: existing });
   }
@@ -68,7 +92,8 @@ export async function POST(request: Request) {
   // Ownership is set once, at creation — a retry of an existing (failed/pending) video
   // must not silently reassign it to whoever happens to trigger the retry.
   const ownerId = existing?.ownerId ?? auth.id;
-  const visibility = existing?.visibility ?? (auth.role === "Admin" ? "base" : "private");
+  const visibility =
+    existing?.visibility ?? (auth.role === "Admin" ? "base" : "private");
 
   log("ingest_started", { videoId, language: body.language });
 
@@ -94,11 +119,17 @@ export async function POST(request: Request) {
     await db.insert(transcriptApiUsage).values({ videoId, succeeded: true });
   } catch (err) {
     await db.insert(transcriptApiUsage).values({ videoId, succeeded: false });
-    const reason = err instanceof TranscriptApiError ? err.message : "Unknown transcript fetch error";
+    const reason =
+      err instanceof TranscriptApiError
+        ? err.message
+        : "Unknown transcript fetch error";
     return failIngest(videoId, reason, 422);
   }
 
-  const languageCheck = checkTranscriptLanguage(sampleForLanguageCheck(transcript.segments), body.language);
+  const languageCheck = checkTranscriptLanguage(
+    sampleForLanguageCheck(transcript.segments),
+    body.language,
+  );
   if (!languageCheck.matches) {
     return failIngest(
       videoId,
@@ -144,14 +175,29 @@ export async function POST(request: Request) {
 
     await db
       .update(videos)
-      .set({ status: "succeeded", title, channel, chunkCount: chunks.length, failureReason: null })
+      .set({
+        status: "succeeded",
+        title,
+        channel,
+        chunkCount: chunks.length,
+        failureReason: null,
+      })
       .where(eq(videos.videoId, videoId));
 
     log("ingest_succeeded", { videoId, chunkCount: chunks.length });
 
-    return NextResponse.json({ status: "succeeded", videoId, chunkCount: chunks.length, title, channel });
+    return NextResponse.json({
+      status: "succeeded",
+      videoId,
+      chunkCount: chunks.length,
+      title,
+      channel,
+    });
   } catch (err) {
-    const reason = err instanceof Error ? err.message : "Unknown error while processing transcript";
+    const reason =
+      err instanceof Error
+        ? err.message
+        : "Unknown error while processing transcript";
     return failIngest(videoId, reason, 500);
   }
 }
