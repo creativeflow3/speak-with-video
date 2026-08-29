@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { chunkTranscript, type TranscriptSegment } from "./chunk";
+import { chunkTranscript } from "./chunk";
 
-function segment(text: string, start: number, duration: number): TranscriptSegment {
+import type { TranscriptSegment } from "./types";
+
+function segment(
+  text: string,
+  start: number,
+  duration: number,
+): TranscriptSegment {
   return { text, start, duration };
 }
 

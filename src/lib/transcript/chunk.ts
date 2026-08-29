@@ -1,26 +1,13 @@
-export interface TranscriptSegment {
-  text: string;
-  start: number;
-  duration: number;
-}
-
-export interface TextChunk {
-  text: string;
-  startTime: number;
-  endTime: number;
-  chunkIndex: number;
-}
-
-export interface ChunkOptions {
-  /** Target word count per chunk before starting a new one. */
-  targetWords?: number;
-}
+import type { TranscriptSegment, TextChunk, ChunkOptions } from "./types";
 
 function wordCount(text: string): number {
   return text.trim().length === 0 ? 0 : text.trim().split(/\s+/).length;
 }
 
-function finalizeChunk(segments: TranscriptSegment[], chunkIndex: number): TextChunk {
+function finalizeChunk(
+  segments: TranscriptSegment[],
+  chunkIndex: number,
+): TextChunk {
   const first = segments[0];
   const last = segments[segments.length - 1];
   return {

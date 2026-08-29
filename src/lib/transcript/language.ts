@@ -1,13 +1,13 @@
 import { franc } from "franc-min";
 import { francCodeFor, isSupportedLanguage } from "@/lib/languages";
 
-export interface LanguageCheckResult {
-  matches: boolean;
-  detected: string;
-}
+import type { LanguageCheckResult } from "./types";
 
 /** Builds a bounded text sample for language detection without joining the whole transcript. */
-export function sampleForLanguageCheck(segments: { text: string }[], maxLength = 3000): string {
+export function sampleForLanguageCheck(
+  segments: { text: string }[],
+  maxLength = 3000,
+): string {
   let sample = "";
   for (const segment of segments) {
     sample += (sample ? " " : "") + segment.text;
@@ -18,8 +18,12 @@ export function sampleForLanguageCheck(segments: { text: string }[], maxLength =
 
 // Detection runs unrestricted (not narrowed to es/pt) so text in some other language
 // entirely is flagged as a mismatch rather than forced into the closest of the two.
-export function checkTranscriptLanguage(text: string, expectedLanguage: string): LanguageCheckResult {
-  if (!isSupportedLanguage(expectedLanguage)) return { matches: true, detected: "und" };
+export function checkTranscriptLanguage(
+  text: string,
+  expectedLanguage: string,
+): LanguageCheckResult {
+  if (!isSupportedLanguage(expectedLanguage))
+    return { matches: true, detected: "und" };
 
   const detected = franc(text);
   const expected = francCodeFor(expectedLanguage);

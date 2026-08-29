@@ -1,16 +1,6 @@
 const BASE_URL = "https://transcriptapi.com/api/v2/youtube/transcript";
 
-export interface TranscriptSegment {
-  text: string;
-  start: number;
-  duration: number;
-}
-
-export interface TranscriptResult {
-  segments: TranscriptSegment[];
-  title: string | null;
-  channel: string | null;
-}
+import type { TranscriptSegment, TranscriptResult } from "./types";
 
 export class TranscriptApiError extends Error {
   constructor(
@@ -48,8 +38,13 @@ async function requestTranscript(
     const message =
       typeof body.detail === "string"
         ? body.detail
-        : body.detail?.message ?? `transcriptapi.com request failed (${res.status})`;
-    throw new TranscriptApiError(message, body.code ?? "unknown_error", res.status);
+        : (body.detail?.message ??
+          `transcriptapi.com request failed (${res.status})`);
+    throw new TranscriptApiError(
+      message,
+      body.code ?? "unknown_error",
+      res.status,
+    );
   }
 
   const data = (await res.json()) as {
@@ -81,7 +76,8 @@ export async function fetchTranscript(
     try {
       return await requestTranscript(videoIdOrUrl, language, apiKey);
     } catch (err) {
-      if (!(err instanceof TranscriptApiError) || attempt === MAX_ATTEMPTS) throw err;
+      if (!(err instanceof TranscriptApiError) || attempt === MAX_ATTEMPTS)
+        throw err;
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
     }
   }
