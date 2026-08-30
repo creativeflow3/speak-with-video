@@ -1,7 +1,4 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { videos, transcriptApiUsage } from "@/db/schema";
 import {
   parseVideoId,
   isYouTubeUrl,
@@ -22,13 +19,18 @@ import { embedDocuments } from "@/lib/voyage";
 import { upsertChunks, type ChunkMetadata } from "@/lib/pinecone";
 import { log } from "@/lib/logger";
 import { requireSession } from "@/lib/authz";
+import {
+  findVideoByVideoId,
+  createVideo,
+  markVideoPending,
+  markVideoFailed,
+  markVideoSucceeded,
+  recordTranscriptApiUsage,
+} from "@/services/ingest.service";
 import type { IngestRequestBody } from "@/types";
 
 async function failIngest(videoId: string, reason: string, status: number) {
-  await db
-    .update(videos)
-    .set({ status: "failed", failureReason: reason })
-    .where(eq(videos.videoId, videoId));
+  await markVideoFailed(videoId, reason);
   log("ingest_failed", { videoId, reason });
   return NextResponse.json({ error: reason }, { status });
 }
@@ -80,11 +82,7 @@ export async function POST(request: Request) {
 
   const youtubeUrl = youtubeUrlFromId(videoId);
 
-  const [existing] = await db
-    .select()
-    .from(videos)
-    .where(eq(videos.videoId, videoId))
-    .limit(1);
+  const existing = await findVideoByVideoId(videoId);
   if (existing?.status === "succeeded") {
     return NextResponse.json({ status: "already_ingested", video: existing });
   }
@@ -98,27 +96,17 @@ export async function POST(request: Request) {
   log("ingest_started", { videoId, language: body.language });
 
   if (existing) {
-    await db
-      .update(videos)
-      .set({ status: "pending", language: body.language, failureReason: null })
-      .where(eq(videos.videoId, videoId));
+    await markVideoPending(videoId, body.language);
   } else {
-    await db.insert(videos).values({
-      videoId,
-      youtubeUrl,
-      language: body.language,
-      status: "pending",
-      ownerId,
-      visibility,
-    });
+    await createVideo({ videoId, youtubeUrl, language: body.language, ownerId, visibility });
   }
 
   let transcript;
   try {
     transcript = await fetchTranscript(videoId, body.language);
-    await db.insert(transcriptApiUsage).values({ videoId, succeeded: true });
+    await recordTranscriptApiUsage(videoId, true);
   } catch (err) {
-    await db.insert(transcriptApiUsage).values({ videoId, succeeded: false });
+    await recordTranscriptApiUsage(videoId, false);
     const reason =
       err instanceof TranscriptApiError
         ? err.message
@@ -173,16 +161,7 @@ export async function POST(request: Request) {
       }),
     );
 
-    await db
-      .update(videos)
-      .set({
-        status: "succeeded",
-        title,
-        channel,
-        chunkCount: chunks.length,
-        failureReason: null,
-      })
-      .where(eq(videos.videoId, videoId));
+    await markVideoSucceeded(videoId, { title, channel, chunkCount: chunks.length });
 
     log("ingest_succeeded", { videoId, chunkCount: chunks.length });
 

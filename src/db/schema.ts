@@ -6,6 +6,7 @@ export const userRole = pgEnum("user_role", ["Admin", "User"]);
 export const videoVisibility = pgEnum("video_visibility", ["base", "private"]);
 
 export type UserRole = (typeof userRole.enumValues)[number];
+export type VideoVisibility = (typeof videoVisibility.enumValues)[number];
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
