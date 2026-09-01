@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { traceable } from "langsmith/traceable";
 import { anthropic, CHAT_MODEL } from "@/lib/anthropic";
 import { requireSession } from "@/lib/authz";
 import { searchRag } from "@/lib/tools/searchRag";
@@ -6,7 +7,7 @@ import { generateAnkiCsvTool } from "@/lib/tools/generateAnkiCsvTool";
 import { addToListTool } from "@/lib/tools/addToListTool";
 import { downloadListTool } from "@/lib/tools/downloadListTool";
 import type { CsvExport } from "@/lib/tools/context";
-import type { ChatRequestBody } from "@/types";
+import type { ChatMessage, ChatRequestBody } from "@/types";
 
 const SYSTEM_PROMPT = `You are a language-learning research assistant. The user is building a personal database of YouTube video transcripts (currently Spanish and Portuguese) and wants to see how words or phrases are actually used by native speakers.
 
@@ -21,6 +22,78 @@ When citing a search_rag result, include the video title and the YouTube link fr
 function sseEvent(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
+
+type ChatTurnInput = {
+  query: string;
+  history: ChatMessage[];
+  userId: string;
+  enqueue: (chunk: string) => void;
+  pendingExports: { event: string; data: CsvExport }[];
+  toolContext: {
+    userId: string;
+    onExport: (event: string, data: CsvExport) => void;
+  };
+};
+
+// LangSmith records this as the trace's parent "chain" run. `toolRunner()` below
+// captures a reference to the raw, unwrapped Anthropic client internally, so the
+// wrapAnthropic() tracing in src/lib/anthropic.ts never fires for it — this span
+// is what gives the tool-calling loop any tracing at all.
+const runChatTurn = traceable(
+  async (input: ChatTurnInput) => {
+    const runner = anthropic.beta.messages.toolRunner({
+      model: CHAT_MODEL,
+      max_tokens: 4096,
+      system: [
+        {
+          type: "text",
+          text: SYSTEM_PROMPT,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      tools: [
+        searchRag(input.toolContext),
+        generateAnkiCsvTool(input.toolContext),
+        addToListTool(input.toolContext),
+        downloadListTool(input.toolContext),
+      ],
+      messages: [...input.history, { role: "user", content: input.query }],
+      stream: true,
+    });
+
+    let responseText = "";
+    const exportedEvents: string[] = [];
+
+    for await (const messageStream of runner) {
+      for await (const event of messageStream) {
+        if (
+          event.type === "content_block_delta" &&
+          event.delta.type === "text_delta"
+        ) {
+          responseText += event.delta.text;
+          input.enqueue(sseEvent("text", { text: event.delta.text }));
+        }
+      }
+
+      while (input.pendingExports.length > 0) {
+        const { event, data } = input.pendingExports.shift()!;
+        exportedEvents.push(event);
+        input.enqueue(sseEvent(event, data));
+      }
+    }
+
+    return { responseText, exportedEvents };
+  },
+  {
+    name: "chat_turn",
+    run_type: "chain",
+    processInputs: ({ query, history, userId }: ChatTurnInput) => ({
+      query,
+      history,
+      userId,
+    }),
+  },
+);
 
 export async function POST(request: Request) {
   const auth = await requireSession();
@@ -61,42 +134,14 @@ export async function POST(request: Request) {
         controller.enqueue(encoder.encode(chunk));
 
       try {
-        const runner = anthropic.beta.messages.toolRunner({
-          model: CHAT_MODEL,
-          max_tokens: 4096,
-          system: [
-            {
-              type: "text",
-              text: SYSTEM_PROMPT,
-              cache_control: { type: "ephemeral" },
-            },
-          ],
-          tools: [
-            searchRag(toolContext),
-            generateAnkiCsvTool(toolContext),
-            addToListTool(toolContext),
-            downloadListTool(toolContext),
-          ],
-          messages: [...history, { role: "user", content: body.query! }],
-          stream: true,
+        await runChatTurn({
+          query: body.query!,
+          history,
+          userId: auth.id,
+          enqueue,
+          pendingExports,
+          toolContext,
         });
-
-        for await (const messageStream of runner) {
-          for await (const event of messageStream) {
-            if (
-              event.type === "content_block_delta" &&
-              event.delta.type === "text_delta"
-            ) {
-              enqueue(sseEvent("text", { text: event.delta.text }));
-            }
-          }
-
-          while (pendingExports.length > 0) {
-            const { event, data } = pendingExports.shift()!;
-            enqueue(sseEvent(event, data));
-          }
-        }
-
         enqueue(sseEvent("done", {}));
       } catch (err) {
         enqueue(

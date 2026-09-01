@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-import Anthropic from "@anthropic-ai/sdk";
 import { anthropic, CHAT_MODEL } from "./anthropic";
 
 describe("anthropic client", () => {
@@ -7,7 +6,8 @@ describe("anthropic client", () => {
     expect(CHAT_MODEL).toBe("claude-sonnet-5");
   });
 
-  it("exports an Anthropic client instance", () => {
-    expect(anthropic).toBeInstanceOf(Anthropic);
+  it("exports a LangSmith-traced Anthropic-like client", () => {
+    expect(typeof anthropic.messages.create).toBe("function");
+    expect(typeof anthropic.beta.messages.toolRunner).toBe("function");
   });
 });
