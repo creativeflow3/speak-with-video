@@ -43,3 +43,6 @@ next-env.d.ts
 # workspace
 speak-with-video.code-workspace
 .neon
+
+# local-only deployment notes (contains Neon project/org identifiers)
+NEON_DEPLOYMENT_PLAN.md

@@ -13,7 +13,7 @@ Paste a YouTube video, then ask how a phrase actually gets used — straight fro
 
 - [Next.js](https://nextjs.org) (App Router) + React + TypeScript
 - [Tailwind CSS](https://tailwindcss.com)
-- [Drizzle ORM](https://orm.drizzle.team) + PostgreSQL
+- [Drizzle ORM](https://orm.drizzle.team) + PostgreSQL (local Postgres for development, [Neon](https://neon.com) in production)
 - [Pinecone](https://www.pinecone.io) for vector search
 - [Voyage AI](https://www.voyageai.com) for embeddings
 - [Anthropic](https://www.anthropic.com) for chat/answers
@@ -85,6 +85,10 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Deployment
+
+Production runs on [Vercel](https://vercel.com), backed by [Neon](https://neon.com) Postgres — local development always stays on local Postgres and is unaffected by this. Vercel's Neon integration automatically provisions an isolated Neon branch (a clone of production data) for every PR preview deployment, and the build runs Drizzle migrations before every deploy.
+
 ## Claude Code Tooling
 
 This repo is set up to work with [Claude Code](https://claude.com/product/claude-code):
@@ -93,6 +97,7 @@ This repo is set up to work with [Claude Code](https://claude.com/product/claude
 - **Skills**
   - [`.claude/skills/frontend-design`](.claude/skills/frontend-design/SKILL.md) guides Claude toward distinctive, intentional UI decisions (palette, typography, layout) instead of templated defaults when building or reshaping frontend work in this repo.
   - [`.claude/skills/langsmith-trace`](.claude/skills/langsmith-trace/SKILL.md), [`langsmith-dataset`](.claude/skills/langsmith-dataset/SKILL.md), and [`langsmith-evaluator`](.claude/skills/langsmith-evaluator/SKILL.md) (from [langchain-ai/langsmith-skills](https://github.com/langchain-ai/langsmith-skills)) help Claude add/query LLM tracing, build evaluation datasets from traces, and write custom evaluators against LangSmith.
+  - [`.claude/skills/neon`](.claude/skills/neon/SKILL.md) and its siblings (`neon-postgres`, `neon-postgres-branches`, `neon-functions`, `neon-object-storage`, `neon-ai-gateway`, `neon-postgres-egress-optimizer`), installed via `neon skills -y`, help Claude work with the Neon CLI/MCP for branching, migrations, and the other Neon services this project could use.
 
 ## Scripts
 
