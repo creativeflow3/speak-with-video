@@ -19,6 +19,7 @@ import { embedDocuments } from "@/lib/voyage";
 import { upsertChunks, type ChunkMetadata } from "@/lib/pinecone";
 import { log } from "@/lib/logger";
 import { requireSession } from "@/lib/authz";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rateLimit";
 import {
   findVideoByVideoId,
   createVideo,
@@ -38,6 +39,9 @@ async function failIngest(videoId: string, reason: string, status: number) {
 export async function POST(request: Request) {
   const auth = await requireSession();
   if (auth instanceof NextResponse) return auth;
+
+  const limited = await checkRateLimit(auth.id, RATE_LIMITS.ingest);
+  if (limited) return limited;
 
   let body: Partial<IngestRequestBody>;
   try {

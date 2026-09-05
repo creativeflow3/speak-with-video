@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, integer, boolean, timestamp, uuid, pgEnum, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, timestamp, uuid, pgEnum, index, uniqueIndex, primaryKey } from "drizzle-orm/pg-core";
 
 export const videoStatus = pgEnum("video_status", ["pending", "succeeded", "failed"]);
 export const userRole = pgEnum("user_role", ["Admin", "User"]);
@@ -37,6 +37,17 @@ export const transcriptApiUsage = pgTable("transcript_api_usage", {
   calledAt: timestamp("called_at", { withTimezone: true }).notNull().defaultNow(),
   succeeded: boolean("succeeded").notNull(),
 });
+
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    userId: uuid("user_id").notNull().references(() => users.id),
+    route: text("route").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull().defaultNow(),
+    count: integer("count").notNull().default(1),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.route] })],
+);
 
 export const ankiList = pgTable(
   "anki_list",

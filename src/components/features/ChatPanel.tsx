@@ -44,6 +44,20 @@ export function ChatPanel() {
         body: JSON.stringify({ query, messages: history }),
       });
 
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const errorText =
+          res.status === 429
+            ? (data.error ?? "You're sending messages too quickly. Wait a bit and try again.")
+            : (data.error ?? "Something went wrong reaching the server. Try sending that again.");
+        setMessages((prev) => {
+          const next = [...prev];
+          next[next.length - 1] = { role: "assistant", content: errorText };
+          return next;
+        });
+        return;
+      }
+
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       let buffer = "";

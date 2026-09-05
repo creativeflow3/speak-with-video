@@ -22,6 +22,13 @@
       "when": 1788025076906,
       "tag": "0002_wakeful_trauma",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788570965101,
+      "tag": "0003_old_firebird",
+      "breakpoints": true
     }
   ]
 }

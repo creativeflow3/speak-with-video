@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { traceable } from "langsmith/traceable";
 import { anthropic, CHAT_MODEL } from "@/lib/anthropic";
 import { requireSession } from "@/lib/authz";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rateLimit";
 import { searchRag } from "@/lib/tools/searchRag";
 import { generateAnkiCsvTool } from "@/lib/tools/generateAnkiCsvTool";
 import { addToListTool } from "@/lib/tools/addToListTool";
@@ -22,6 +23,8 @@ When citing a search_rag result, include the video title and the YouTube link fr
 function sseEvent(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
+
+const MAX_HISTORY_MESSAGES = 20;
 
 type ChatTurnInput = {
   query: string;
@@ -59,6 +62,7 @@ const runChatTurn = traceable(
       ],
       messages: [...input.history, { role: "user", content: input.query }],
       stream: true,
+      max_iterations: 8,
     });
 
     let responseText = "";
@@ -99,6 +103,9 @@ export async function POST(request: Request) {
   const auth = await requireSession();
   if (auth instanceof NextResponse) return auth;
 
+  const limited = await checkRateLimit(auth.id, RATE_LIMITS.chat);
+  if (limited) return limited;
+
   let body: Partial<ChatRequestBody>;
   try {
     body = (await request.json()) as Partial<ChatRequestBody>;
@@ -114,7 +121,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const history = (body.messages ?? []).map((m) => ({
+  const history = (body.messages ?? []).slice(-MAX_HISTORY_MESSAGES).map((m) => ({
     role: m.role,
     content: m.content,
   }));
