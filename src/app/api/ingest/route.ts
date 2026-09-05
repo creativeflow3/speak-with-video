@@ -31,6 +31,12 @@ import {
 } from "@/services/ingest.service";
 import type { IngestRequestBody } from "@/types";
 
+// Transcript fetch (with retries), oembed, embeddings, and the Pinecone upsert
+// run sequentially and can add up past Vercel's default function timeout —
+// that shows up client-side as a non-JSON response, i.e. the generic "network
+// error" in IngestForm. 60s is the max allowed on Vercel's Hobby tier.
+export const maxDuration = 60;
+
 // Thrown for expected, business-logic failures partway through `runIngest` (bad
 // language match, empty transcript, etc.) so they show up in the LangSmith trace
 // as an error on that step rather than being swallowed by an early return.
