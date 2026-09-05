@@ -3,7 +3,7 @@ import { parseVideoId, isYouTubeUrl, youtubeUrlFromId } from "@/lib/youtube";
 import { isSupportedLanguage } from "@/lib/languages";
 import { log } from "@/lib/logger";
 import { requireSession } from "@/lib/authz";
-import { checkRateLimit, RATE_LIMITS } from "@/lib/rateLimit";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import {
   findVideoByVideoId,
   createVideo,

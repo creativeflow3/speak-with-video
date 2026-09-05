@@ -1,6 +1,6 @@
 import { Pinecone } from "@pinecone-database/pinecone";
 import type { RecordMetadata } from "@pinecone-database/pinecone";
-import { EMBEDDING_DIMENSION } from "./voyage";
+import { EMBEDDING_DIMENSION } from "@/lib/voyage";
 
 export interface ChunkMetadata extends RecordMetadata {
   videoId: string;

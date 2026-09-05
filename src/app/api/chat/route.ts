@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/authz";
-import { checkRateLimit, RATE_LIMITS } from "@/lib/rateLimit";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { toolDispatcher } from "@/lib/tool-dispatcher";
 import { sseEvent } from "@/lib/utils";
 import type { CsvExport } from "@/lib/tools/context";
