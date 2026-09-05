@@ -1,5 +1,9 @@
 import type { SseFrame } from "@/types";
 
+export function sseEvent(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
 export function parseSseChunk(buffer: string): { frames: SseFrame[]; rest: string } {
   const parts = buffer.split("\n\n");
   const rest = parts.pop() ?? "";
