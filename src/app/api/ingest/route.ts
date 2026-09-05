@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { traceable } from "langsmith/traceable";
 import {
   parseVideoId,
   isYouTubeUrl,
@@ -30,11 +31,144 @@ import {
 } from "@/services/ingest.service";
 import type { IngestRequestBody } from "@/types";
 
+// Thrown for expected, business-logic failures partway through `runIngest` (bad
+// language match, empty transcript, etc.) so they show up in the LangSmith trace
+// as an error on that step rather than being swallowed by an early return.
+class IngestValidationError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = "IngestValidationError";
+  }
+}
+
+// Each wrapped as its own LangSmith "tool" span so a production failure shows
+// exactly which external call failed or timed out (transcriptapi.com, YouTube
+// oembed, Voyage, Pinecone) instead of just "network error" in the browser.
+const tracedFetchTranscript = traceable(fetchTranscript, {
+  name: "fetch_transcript",
+  run_type: "tool",
+});
+const tracedFetchOEmbed = traceable(fetchOEmbed, {
+  name: "fetch_oembed",
+  run_type: "tool",
+});
+const tracedEmbedDocuments = traceable(embedDocuments, {
+  name: "embed_documents",
+  run_type: "tool",
+});
+const tracedUpsertChunks = traceable(upsertChunks, {
+  name: "upsert_chunks",
+  run_type: "tool",
+});
+
 async function failIngest(videoId: string, reason: string, status: number) {
   await markVideoFailed(videoId, reason);
   log("ingest_failed", { videoId, reason });
   return NextResponse.json({ error: reason }, { status });
 }
+
+interface RunIngestInput {
+  videoId: string;
+  youtubeUrl: string;
+  language: string;
+  ownerId: string;
+  visibility: "base" | "private";
+  titleOverride?: string;
+  channelOverride?: string;
+}
+
+// Parent LangSmith trace for one ingest request; the tool spans above nest
+// under it, giving a single trace per upload with per-step timing and errors.
+const runIngest = traceable(
+  async ({
+    videoId,
+    youtubeUrl,
+    language,
+    ownerId,
+    visibility,
+    titleOverride,
+    channelOverride,
+  }: RunIngestInput) => {
+    let transcript;
+    try {
+      transcript = await tracedFetchTranscript(videoId, language);
+      await recordTranscriptApiUsage(videoId, true);
+    } catch (err) {
+      await recordTranscriptApiUsage(videoId, false);
+      const reason =
+        err instanceof TranscriptApiError
+          ? err.message
+          : "Unknown transcript fetch error";
+      throw new IngestValidationError(reason, 422);
+    }
+
+    const languageCheck = checkTranscriptLanguage(
+      sampleForLanguageCheck(transcript.segments),
+      language,
+    );
+    if (!languageCheck.matches) {
+      throw new IngestValidationError(
+        `Transcript appears to be in "${languageCheck.detected}", not the requested "${language}"`,
+        422,
+      );
+    }
+
+    let title = transcript.title ?? titleOverride ?? null;
+    let channel = transcript.channel ?? channelOverride ?? null;
+    if (!title || !channel) {
+      const oembed = await tracedFetchOEmbed(youtubeUrl);
+      title = title ?? oembed?.title ?? titleOverride ?? "";
+      channel = channel ?? oembed?.channel ?? channelOverride ?? "";
+    }
+
+    const chunks = chunkTranscript(transcript.segments);
+    if (chunks.length === 0) {
+      throw new IngestValidationError(
+        "Transcript was empty after chunking",
+        422,
+      );
+    }
+
+    const vectors = await tracedEmbedDocuments(chunks.map((c) => c.text));
+
+    await tracedUpsertChunks(
+      chunks.map((chunk, i) => {
+        const metadata: ChunkMetadata = {
+          videoId,
+          youtubeUrl,
+          language,
+          channel: channel ?? "",
+          videoTitle: title ?? "",
+          text: chunk.text,
+          chunkIndex: chunk.chunkIndex,
+          startTime: chunk.startTime,
+          endTime: chunk.endTime,
+          ownerId,
+          visibility,
+        };
+        return { vector: vectors[i], metadata };
+      }),
+    );
+
+    await markVideoSucceeded(videoId, { title, channel, chunkCount: chunks.length });
+    log("ingest_succeeded", { videoId, chunkCount: chunks.length });
+
+    return { videoId, chunkCount: chunks.length, title, channel };
+  },
+  {
+    name: "ingest_video",
+    run_type: "chain",
+    processInputs: ({ videoId, language, ownerId, visibility }: RunIngestInput) => ({
+      videoId,
+      language,
+      ownerId,
+      visibility,
+    }),
+  },
+);
 
 export async function POST(request: Request) {
   const auth = await requireSession();
@@ -59,10 +193,11 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+  const language = body.language;
 
-  if (!isSupportedLanguage(body.language)) {
+  if (!isSupportedLanguage(language)) {
     return NextResponse.json(
-      { error: `Unsupported language "${body.language}"` },
+      { error: `Unsupported language "${language}"` },
       { status: 400 },
     );
   }
@@ -97,86 +232,30 @@ export async function POST(request: Request) {
   const visibility =
     existing?.visibility ?? (auth.role === "Admin" ? "base" : "private");
 
-  log("ingest_started", { videoId, language: body.language });
+  log("ingest_started", { videoId, language });
 
   if (existing) {
-    await markVideoPending(videoId, body.language);
+    await markVideoPending(videoId, language);
   } else {
-    await createVideo({ videoId, youtubeUrl, language: body.language, ownerId, visibility });
-  }
-
-  let transcript;
-  try {
-    transcript = await fetchTranscript(videoId, body.language);
-    await recordTranscriptApiUsage(videoId, true);
-  } catch (err) {
-    await recordTranscriptApiUsage(videoId, false);
-    const reason =
-      err instanceof TranscriptApiError
-        ? err.message
-        : "Unknown transcript fetch error";
-    return failIngest(videoId, reason, 422);
-  }
-
-  const languageCheck = checkTranscriptLanguage(
-    sampleForLanguageCheck(transcript.segments),
-    body.language,
-  );
-  if (!languageCheck.matches) {
-    return failIngest(
-      videoId,
-      `Transcript appears to be in "${languageCheck.detected}", not the requested "${body.language}"`,
-      422,
-    );
+    await createVideo({ videoId, youtubeUrl, language, ownerId, visibility });
   }
 
   try {
-    let title = transcript.title ?? body.titleOverride ?? null;
-    let channel = transcript.channel ?? body.channelOverride ?? null;
-    if (!title || !channel) {
-      const oembed = await fetchOEmbed(youtubeUrl);
-      title = title ?? oembed?.title ?? body.titleOverride ?? "";
-      channel = channel ?? oembed?.channel ?? body.channelOverride ?? "";
-    }
-
-    const chunks = chunkTranscript(transcript.segments);
-    if (chunks.length === 0) {
-      return failIngest(videoId, "Transcript was empty after chunking", 422);
-    }
-
-    const vectors = await embedDocuments(chunks.map((c) => c.text));
-
-    await upsertChunks(
-      chunks.map((chunk, i) => {
-        const metadata: ChunkMetadata = {
-          videoId,
-          youtubeUrl,
-          language: body.language!,
-          channel: channel ?? "",
-          videoTitle: title ?? "",
-          text: chunk.text,
-          chunkIndex: chunk.chunkIndex,
-          startTime: chunk.startTime,
-          endTime: chunk.endTime,
-          ownerId,
-          visibility,
-        };
-        return { vector: vectors[i], metadata };
-      }),
-    );
-
-    await markVideoSucceeded(videoId, { title, channel, chunkCount: chunks.length });
-
-    log("ingest_succeeded", { videoId, chunkCount: chunks.length });
-
-    return NextResponse.json({
-      status: "succeeded",
+    const result = await runIngest({
       videoId,
-      chunkCount: chunks.length,
-      title,
-      channel,
+      youtubeUrl,
+      language,
+      ownerId,
+      visibility,
+      titleOverride: body.titleOverride,
+      channelOverride: body.channelOverride,
     });
+
+    return NextResponse.json({ status: "succeeded", ...result });
   } catch (err) {
+    if (err instanceof IngestValidationError) {
+      return failIngest(videoId, err.message, err.status);
+    }
     const reason =
       err instanceof Error
         ? err.message
