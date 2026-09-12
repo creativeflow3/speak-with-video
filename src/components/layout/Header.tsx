@@ -6,7 +6,7 @@ interface HeaderProps {
 
 export function Header({ displayName }: HeaderProps) {
   return (
-    <header className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-6 pt-10 sm:flex-row sm:items-start sm:justify-between">
+    <header className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 pt-6 sm:flex-row sm:items-start sm:justify-between lg:px-6 lg:pt-10">
       <div>
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted">
           Real phrases, real videos

@@ -7,7 +7,7 @@ interface PanelProps {
   onSubmit?: FormEventHandler<HTMLFormElement>;
 }
 
-const PANEL_CLASSES = "rounded-2xl border border-line bg-surface p-5";
+const PANEL_CLASSES = "rounded-2xl border border-line bg-surface p-4 lg:p-5";
 
 export function Panel({ as = "div", className, children, onSubmit }: PanelProps) {
   const classes = `${PANEL_CLASSES} ${className ?? ""}`;

@@ -17,9 +17,9 @@ export default async function Home() {
     <div className="flex min-h-full flex-1 flex-col bg-canvas text-ink">
       <Header displayName={displayName} />
 
-      <div className="tick-rail mx-auto mt-8 w-full max-w-5xl px-6" />
+      <div className="tick-rail mx-auto mt-6 w-full max-w-5xl px-4 lg:mt-8 lg:px-6" />
 
-      <main className="mx-auto grid w-full max-w-5xl flex-1 items-start gap-6 p-6 lg:grid-cols-[320px_1fr]">
+      <main className="mx-auto grid w-full max-w-5xl flex-1 items-start gap-4 px-4 py-6 lg:grid-cols-[320px_1fr] lg:gap-6 lg:px-6">
         <IngestForm />
         <ChatPanel />
       </main>
