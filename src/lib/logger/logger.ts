@@ -6,7 +6,9 @@ type LogEvent =
   | "tool_call"
   | "anki_export"
   | "list_add"
-  | "list_download";
+  | "list_download"
+  | "guardrail_blocked"
+  | "guardrail_check_failed";
 
 export function log(event: LogEvent, data: Record<string, unknown> = {}) {
   console.log(

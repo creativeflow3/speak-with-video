@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/authz";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { checkGuardrails } from "@/lib/guardrails";
 import { toolDispatcher } from "@/lib/tool-dispatcher";
 import { sseEvent } from "@/lib/utils";
 import type { CsvExport } from "@/lib/tools/context";
@@ -29,6 +30,9 @@ export async function POST(request: Request) {
       status: 400,
     });
   }
+
+  const blocked = await checkGuardrails(body.query, auth.id);
+  if (blocked) return blocked;
 
   const history = (body.messages ?? []).slice(-MAX_HISTORY_MESSAGES).map((m) => ({
     role: m.role,
