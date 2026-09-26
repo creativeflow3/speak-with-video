@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
-import { generateAnkiCsv, type AnkiCard } from "@/lib/anki/csv";
+import { generateAnkiCsv, type AnkiCard } from "@/lib/anki";
 import { log } from "@/lib/logger";
 import type { ToolContext } from "./context";
 

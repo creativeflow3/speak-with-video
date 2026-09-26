@@ -71,3 +71,26 @@ export function youtubeUrlFromId(videoId: string): string {
 export function deepLinkUrl(videoId: string, startTime: number): string {
   return `https://youtu.be/${videoId}?t=${Math.floor(startTime)}`;
 }
+
+export type TextSegment = { type: "text"; value: string } | { type: "link"; value: string };
+
+const URL_RE = /https?:\/\/[^\s<>"')\]]+/g;
+const TRAILING_PUNCTUATION_RE = /[.,;:!?]+$/;
+
+/** Split text into plain and YouTube-link segments so links can be rendered as anchors. Other URLs stay plain text. */
+export function splitYouTubeLinks(text: string): TextSegment[] {
+  const segments: TextSegment[] = [];
+  let cursor = 0;
+
+  for (const match of text.matchAll(URL_RE)) {
+    const url = match[0].replace(TRAILING_PUNCTUATION_RE, "");
+    if (!parseVideoId(url)) continue;
+
+    if (match.index > cursor) segments.push({ type: "text", value: text.slice(cursor, match.index) });
+    segments.push({ type: "link", value: url });
+    cursor = match.index + url.length;
+  }
+
+  if (cursor < text.length) segments.push({ type: "text", value: text.slice(cursor) });
+  return segments;
+}

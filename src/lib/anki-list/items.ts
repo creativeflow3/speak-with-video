@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { ankiList, ankiListItems } from "@/db/schema";
-import type { AnkiCard } from "@/lib/anki/csv";
+import type { AnkiCard } from "@/lib/anki";
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Executor = typeof db | Transaction;

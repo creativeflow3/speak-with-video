@@ -72,6 +72,22 @@ describe("ChatPanel", () => {
     expect(screen.getByPlaceholderText('Try: "vale la pena"')).toHaveValue("");
   });
 
+  it("renders YouTube URLs in the assistant reply as links that open in a new tab", async () => {
+    const url = "https://youtu.be/dQw4w9WgXcQ?t=42";
+    fetchMock.mockResolvedValue({
+      ok: true,
+      body: streamOf(sseEvent("text", { text: `It means worth it. Watch ${url}` })),
+    });
+    render(<ChatPanel />);
+
+    await sendQuery("vale la pena");
+
+    const link = await screen.findByRole("link", { name: url });
+    expect(link).toHaveAttribute("href", url);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
   it("does not submit an empty or whitespace-only message", async () => {
     render(<ChatPanel />);
     fireEvent.change(screen.getByPlaceholderText('Try: "vale la pena"'), { target: { value: "   " } });

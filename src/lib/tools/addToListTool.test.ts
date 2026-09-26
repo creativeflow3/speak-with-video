@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { addListItem } from "@/lib/anki-list/items";
+import { addListItem } from "@/lib/anki-list";
 import { addToListTool } from "./addToListTool";
 import { makeToolContext } from "./testUtils";
 
-vi.mock("@/lib/anki-list/items", () => ({ addListItem: vi.fn() }));
+vi.mock("@/lib/anki-list", () => ({ addListItem: vi.fn() }));
 
 describe("addToListTool", () => {
   beforeEach(() => {

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { FOCUS_RING } from "@/components/ui/styles";
+import { splitYouTubeLinks } from "@/lib/youtube";
 import { parseSseChunk } from "@/lib/utils";
 import type { ChatMessage } from "@/types";
 
@@ -16,6 +17,24 @@ const CSV_EXPORT_CONFIG: Record<string, { filename: string; label: (cardCount: n
   anki_csv: { filename: "anki-export.csv", label: (n) => `↓ Export ${n} cards to Anki` },
   list_csv: { filename: "vocab-list.csv", label: (n) => `↓ Download list (${n})` },
 };
+
+const LinkedText = memo(function LinkedText({ text }: { text: string }) {
+  return splitYouTubeLinks(text).map((segment, i) =>
+    segment.type === "link" ? (
+      <a
+        key={i}
+        href={segment.value}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`break-all underline decoration-accent underline-offset-2 hover:opacity-80 ${FOCUS_RING}`}
+      >
+        {segment.value}
+      </a>
+    ) : (
+      segment.value
+    ),
+  );
+});
 
 export function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -143,7 +162,9 @@ export function ChatPanel() {
                   <span className="mb-1 block font-mono text-[10px] uppercase tracking-widest opacity-60">
                     {m.role === "user" ? "You" : "Guide"}
                   </span>
-                  <p className="whitespace-pre-wrap text-sm">{m.content}</p>
+                  <p className="whitespace-pre-wrap text-sm">
+                    <LinkedText text={m.content} />
+                  </p>
                 </div>
               </div>
             ))}

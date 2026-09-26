@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
-import { addListItem } from "@/lib/anki-list/items";
+import { addListItem } from "@/lib/anki-list";
 import { log } from "@/lib/logger";
 import type { ToolContext } from "./context";
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
-import { generateAnkiCsv } from "@/lib/anki/csv";
-import { downloadAndClearList } from "@/lib/anki-list/items";
+import { generateAnkiCsv } from "@/lib/anki";
+import { downloadAndClearList } from "@/lib/anki-list";
 import { log } from "@/lib/logger";
 import type { ToolContext } from "./context";
 

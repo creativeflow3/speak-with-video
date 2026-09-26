@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { downloadAndClearList } from "@/lib/anki-list/items";
+import { downloadAndClearList } from "@/lib/anki-list";
 import { downloadListTool } from "./downloadListTool";
 import { makeToolContext } from "./testUtils";
 
-vi.mock("@/lib/anki-list/items", () => ({ downloadAndClearList: vi.fn() }));
+vi.mock("@/lib/anki-list", () => ({ downloadAndClearList: vi.fn() }));
 
 describe("downloadListTool", () => {
   beforeEach(() => {
