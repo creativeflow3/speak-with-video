@@ -6,7 +6,7 @@ import { Panel } from "@/components/ui/panel";
 import { FOCUS_RING } from "@/components/ui/styles";
 import { splitYouTubeLinks } from "@/lib/youtube";
 import { parseSseChunk } from "@/lib/utils";
-import type { ChatMessage } from "@/types";
+import type { ChatMessage, SseFrame } from "@/types";
 
 interface CsvExport {
   csv: string;
@@ -16,6 +16,14 @@ interface CsvExport {
 const CSV_EXPORT_CONFIG: Record<string, { filename: string; label: (cardCount: number) => string }> = {
   anki_csv: { filename: "anki-export.csv", label: (n) => `↓ Export ${n} cards to Anki` },
   list_csv: { filename: "vocab-list.csv", label: (n) => `↓ Download list (${n})` },
+};
+
+// Shown while a tool runs, keyed by the tool name in the server's `status` event.
+const TOOL_STATUS: Record<string, string> = {
+  search_rag: "Searching your videos…",
+  generate_anki_csv: "Building flashcards…",
+  add_to_list: "Adding to your list…",
+  download_list: "Preparing your list…",
 };
 
 const LinkedText = memo(function LinkedText({ text }: { text: string }) {
@@ -36,11 +44,55 @@ const LinkedText = memo(function LinkedText({ text }: { text: string }) {
   );
 });
 
+/** Reads an SSE response body to the end, handing each complete frame to `onFrame`. */
+async function readSseFrames(body: ReadableStream<Uint8Array>, onFrame: (frame: SseFrame) => void) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return;
+    buffer += decoder.decode(value, { stream: true });
+    const { frames, rest } = parseSseChunk(buffer);
+    buffer = rest;
+    frames.forEach(onFrame);
+  }
+}
+
+async function errorTextFor(res: Response): Promise<string> {
+  const data = await res.json().catch(() => ({}));
+  if (data.error) return data.error;
+  return res.status === 429
+    ? "You're sending messages too quickly. Wait a bit and try again."
+    : "Something went wrong reaching the server. Try sending that again.";
+}
+
 export function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [csvExports, setCsvExports] = useState<Record<string, CsvExport>>({});
+  const [status, setStatus] = useState<string | null>(null);
+
+  function setAssistantReply(content: string) {
+    setMessages((prev) => [...prev.slice(0, -1), { role: "assistant", content }]);
+  }
+
+  function makeFrameHandler() {
+    let assistantText = "";
+    return (frame: SseFrame) => {
+      if (frame.event === "text") {
+        assistantText += (JSON.parse(frame.data) as { text: string }).text;
+        setStatus(null);
+        setAssistantReply(assistantText);
+      } else if (frame.event === "status") {
+        const { tool } = JSON.parse(frame.data) as { tool: string };
+        setStatus(TOOL_STATUS[tool] ?? "Working…");
+      } else if (frame.event in CSV_EXPORT_CONFIG) {
+        setCsvExports((prev) => ({ ...prev, [frame.event]: JSON.parse(frame.data) as CsvExport }));
+      }
+    };
+  }
 
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
@@ -48,13 +100,10 @@ export function ChatPanel() {
 
     const query = input;
     const history = messages;
-    setMessages((prev) => [...prev, { role: "user", content: query }]);
+    setMessages((prev) => [...prev, { role: "user", content: query }, { role: "assistant", content: "" }]);
     setInput("");
     setLoading(true);
     setCsvExports({});
-
-    let assistantText = "";
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
       const res = await fetch("/api/chat", {
@@ -62,60 +111,13 @@ export function ChatPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, messages: history }),
       });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        const errorText =
-          res.status === 429
-            ? (data.error ?? "You're sending messages too quickly. Wait a bit and try again.")
-            : (data.error ?? "Something went wrong reaching the server. Try sending that again.");
-        setMessages((prev) => {
-          const next = [...prev];
-          next[next.length - 1] = { role: "assistant", content: errorText };
-          return next;
-        });
-        return;
-      }
-
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const { frames, rest } = parseSseChunk(buffer);
-          buffer = rest;
-
-          for (const frame of frames) {
-            if (frame.event === "text") {
-              const { text } = JSON.parse(frame.data) as { text: string };
-              assistantText += text;
-              setMessages((prev) => {
-                const next = [...prev];
-                next[next.length - 1] = { role: "assistant", content: assistantText };
-                return next;
-              });
-            } else if (frame.event in CSV_EXPORT_CONFIG) {
-              const data = JSON.parse(frame.data) as CsvExport;
-              setCsvExports((prev) => ({ ...prev, [frame.event]: data }));
-            }
-          }
-        }
-      }
+      if (!res.ok) setAssistantReply(await errorTextFor(res));
+      else if (res.body) await readSseFrames(res.body, makeFrameHandler());
     } catch {
-      setMessages((prev) => {
-        const next = [...prev];
-        next[next.length - 1] = {
-          role: "assistant",
-          content: "Something went wrong reaching the server. Try sending that again.",
-        };
-        return next;
-      });
+      setAssistantReply("Something went wrong reaching the server. Try sending that again.");
     } finally {
       setLoading(false);
+      setStatus(null);
     }
   }
 
@@ -162,9 +164,16 @@ export function ChatPanel() {
                   <span className="mb-1 block font-mono text-[10px] uppercase tracking-widest opacity-60">
                     {m.role === "user" ? "You" : "Guide"}
                   </span>
-                  <p className="whitespace-pre-wrap text-sm">
-                    <LinkedText text={m.content} />
-                  </p>
+                  {m.content && (
+                    <p className="whitespace-pre-wrap text-sm">
+                      <LinkedText text={m.content} />
+                    </p>
+                  )}
+                  {loading && i === messages.length - 1 && (status || !m.content) && (
+                    <p role="status" className="animate-pulse text-sm italic text-muted">
+                      {status ?? "Thinking…"}
+                    </p>
+                  )}
                 </div>
               </div>
             ))}

@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { toolDispatcher, type ChatTurnInput } from "./toolDispatcher";
+import type { BetaRunnableTool } from "@anthropic-ai/sdk/lib/tools/BetaRunnableTool";
+import { sseEvent } from "@/lib/utils";
+import { toolDispatcher, gateTool, type ChatTurnInput } from "./toolDispatcher";
 
 function fakeAsyncIterable<T>(items: T[]): AsyncIterable<T> {
   return {
@@ -27,6 +29,7 @@ function baseInput(overrides: Partial<ChatTurnInput> = {}): ChatTurnInput {
     query: "hola",
     history: [],
     userId: "user-1",
+    toolsAllowed: Promise.resolve(true),
     enqueue: vi.fn(),
     pendingExports: [],
     toolContext: { userId: "user-1", onExport: vi.fn() },
@@ -82,12 +85,13 @@ describe("toolDispatcher", () => {
         stream: true,
         messages: [{ role: "user", content: "prior" }, { role: "user", content: "new query" }],
       }),
+      expect.anything(),
     );
   });
 
   it("ignores non-text-delta events", async () => {
     mocks.toolRunner.mockReturnValue(
-      fakeAsyncIterable([fakeAsyncIterable([{ type: "content_block_start" }])]),
+      fakeAsyncIterable([fakeAsyncIterable([{ type: "content_block_start", content_block: { type: "text" } }])]),
     );
     const input = baseInput();
 
@@ -95,5 +99,69 @@ describe("toolDispatcher", () => {
 
     expect(result.responseText).toBe("");
     expect(input.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("emits a status event naming the tool as soon as a tool call starts", async () => {
+    mocks.toolRunner.mockReturnValue(
+      fakeAsyncIterable([
+        fakeAsyncIterable([{ type: "content_block_start", content_block: { type: "tool_use", name: "search_rag" } }]),
+      ]),
+    );
+    const input = baseInput();
+
+    await toolDispatcher(input);
+
+    expect(input.enqueue).toHaveBeenCalledWith(sseEvent("status", { tool: "search_rag" }));
+  });
+
+  it("passes the abort signal through to toolRunner", async () => {
+    mocks.toolRunner.mockReturnValue(fakeAsyncIterable([]));
+    const signal = new AbortController().signal;
+
+    await toolDispatcher(baseInput({ signal }));
+
+    expect(mocks.toolRunner).toHaveBeenCalledWith(expect.anything(), { signal });
+  });
+
+  it("gates every tool it hands to toolRunner", async () => {
+    mocks.toolRunner.mockReturnValue(fakeAsyncIterable([]));
+
+    await toolDispatcher(baseInput({ toolsAllowed: Promise.resolve(false) }));
+
+    const { tools } = mocks.toolRunner.mock.lastCall![0] as { tools: BetaRunnableTool[] };
+    expect(tools.length).toBeGreaterThan(0);
+    for (const tool of tools) {
+      await expect(tool.run({})).rejects.toThrow("Request blocked by guardrails");
+    }
+  });
+});
+
+describe("gateTool", () => {
+  function fakeTool(run = vi.fn().mockResolvedValue("ok")): BetaRunnableTool {
+    return { type: "custom", name: "t", input_schema: { type: "object" }, run, parse: (x) => x } as BetaRunnableTool;
+  }
+
+  it("runs the tool once the guardrail has passed", async () => {
+    await expect(gateTool(fakeTool(), Promise.resolve(true)).run({})).resolves.toBe("ok");
+  });
+
+  it("refuses to run the tool when the guardrail blocks", async () => {
+    const run = vi.fn();
+    await expect(gateTool(fakeTool(run), Promise.resolve(false)).run({})).rejects.toThrow(
+      "Request blocked by guardrails",
+    );
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("waits for a slow guardrail before running the tool", async () => {
+    const run = vi.fn().mockResolvedValue("ok");
+    let pass!: (allowed: boolean) => void;
+    const running = gateTool(fakeTool(run), new Promise((resolve) => (pass = resolve))).run({});
+
+    await Promise.resolve();
+    expect(run).not.toHaveBeenCalled();
+
+    pass(true);
+    await expect(running).resolves.toBe("ok");
   });
 });

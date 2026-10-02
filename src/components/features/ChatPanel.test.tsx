@@ -163,4 +163,37 @@ describe("ChatPanel", () => {
     resolveFetch({ ok: true, body: streamOf() });
     await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).not.toBeDisabled());
   });
+
+  it("shows a thinking indicator before anything has streamed", async () => {
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    render(<ChatPanel />);
+
+    await sendQuery("hola");
+
+    expect(screen.getByRole("status")).toHaveTextContent("Thinking…");
+  });
+
+  it("shows the running tool's status, then replaces it with the streamed reply", async () => {
+    let push!: (chunk: string) => void;
+    let finish!: () => void;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        push = (chunk) => controller.enqueue(encoder.encode(chunk));
+        finish = () => controller.close();
+      },
+    });
+    fetchMock.mockResolvedValue({ ok: true, body });
+    render(<ChatPanel />);
+
+    await sendQuery("vale la pena");
+    push(sseEvent("status", { tool: "search_rag" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Searching your videos…");
+
+    push(sseEvent("text", { text: "Here are examples" }));
+    expect(await screen.findByText("Here are examples")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+    finish();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).not.toBeDisabled());
+  });
 });
