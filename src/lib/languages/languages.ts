@@ -5,6 +5,8 @@ export const SUPPORTED_LANGUAGES = [
 
 export type SupportedLanguageCode = (typeof SUPPORTED_LANGUAGES)[number]["code"];
 
+export const SUPPORTED_LANGUAGE_CODES = SUPPORTED_LANGUAGES.map((l) => l.code);
+
 export function isSupportedLanguage(code: string): code is SupportedLanguageCode {
   return SUPPORTED_LANGUAGES.some((l) => l.code === code);
 }

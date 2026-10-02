@@ -107,11 +107,13 @@ describe("queryChunks", () => {
 
     expect(result).toEqual([
       {
+        videoId: "vid1",
         text: "vale la pena",
         videoTitle: "Title",
         channel: "Channel",
         youtubeUrl: "https://www.youtube.com/watch?v=abcdefghijk",
         startTime: 0,
+        endTime: 5,
         score: 0.9,
       },
     ]);

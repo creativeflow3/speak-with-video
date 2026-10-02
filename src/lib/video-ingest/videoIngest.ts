@@ -12,6 +12,7 @@ import {
 import { embedDocuments } from "@/lib/voyage";
 import { upsertChunks, type ChunkMetadata } from "@/lib/pinecone";
 import { log } from "@/lib/logger";
+import type { SupportedLanguageCode } from "@/lib/languages";
 import {
   markVideoSucceeded,
   recordTranscriptApiUsage,
@@ -53,7 +54,7 @@ const tracedUpsertChunks = traceable(upsertChunks, {
 export interface VideoIngestInput {
   videoId: string;
   youtubeUrl: string;
-  language: string;
+  language: SupportedLanguageCode;
   ownerId: string;
   visibility: "base" | "private";
   titleOverride?: string;

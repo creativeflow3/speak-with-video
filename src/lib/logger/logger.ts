@@ -3,6 +3,7 @@ type LogEvent =
   | "ingest_succeeded"
   | "ingest_failed"
   | "rag_query"
+  | "rerank_failed"
   | "tool_call"
   | "anki_export"
   | "list_add"

@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
-import { embedQuery } from "@/lib/voyage";
-import { queryChunks } from "@/lib/pinecone";
-import { deepLinkUrl, parseVideoId } from "@/lib/youtube";
+import { searchClips } from "@/lib/clip-search";
+import { distinctVideos } from "@/lib/retrieval-metrics";
+import { SUPPORTED_LANGUAGE_CODES } from "@/lib/languages";
+import { deepLinkUrl } from "@/lib/youtube";
 import { log } from "@/lib/logger";
 import type { ToolContext } from "./context";
 
@@ -13,25 +14,41 @@ export function searchRag(context: ToolContext) {
       "Search the ingested YouTube transcript database for real example usage of a word or phrase.",
     inputSchema: z.object({
       query: z.string().describe("The word or phrase to search for, e.g. 'vale la pena'"),
-      language: z.string().optional().describe("Optional ISO language code filter, e.g. 'es'"),
+      // An enum, not a free string: the filter is an exact match on the stored code, so a
+      // regional variant like "pt-BR" or "es-MX" would silently match zero chunks.
+      language: z
+        .enum(SUPPORTED_LANGUAGE_CODES)
+        .optional()
+        .describe("Optional language filter. Use the base code only (e.g. 'pt' for Brazilian Portuguese)."),
       topK: z.number().int().min(1).max(10).optional().describe("Number of results to return (default 5)"),
     }),
     run: async ({ query, language, topK }) => {
       const start = Date.now();
-      const vector = await embedQuery(query);
-      const matches = await queryChunks(vector, { userId: context.userId, topK, language });
-      log("rag_query", { query, language, resultCount: matches.length, ms: Date.now() - start });
+      const { matches, candidateCount, reranked, rerankMs } = await searchClips(query, {
+        userId: context.userId,
+        language,
+        topK,
+      });
+      log("rag_query", {
+        query,
+        language,
+        resultCount: matches.length,
+        candidateCount,
+        reranked,
+        rerankMs,
+        resultVideoCount: distinctVideos(matches),
+        ms: Date.now() - start,
+      });
 
       if (matches.length === 0) {
         return "No matching examples were found in the ingested videos.";
       }
 
       return matches
-        .map((m, i) => {
-          const videoId = parseVideoId(m.youtubeUrl);
-          const link = videoId ? deepLinkUrl(videoId, m.startTime) : m.youtubeUrl;
-          return `${i + 1}. "${m.text}"\n   Video: ${m.videoTitle} (${m.channel})\n   Link: ${link}`;
-        })
+        .map(
+          (m, i) =>
+            `${i + 1}. "${m.text}"\n   Video: ${m.videoTitle} (${m.channel})\n   Link: ${deepLinkUrl(m.videoId, m.startTime)}`,
+        )
         .join("\n\n");
     },
   });

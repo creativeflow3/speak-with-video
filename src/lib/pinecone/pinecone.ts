@@ -1,11 +1,12 @@
 import { Pinecone } from "@pinecone-database/pinecone";
 import type { RecordMetadata } from "@pinecone-database/pinecone";
 import { EMBEDDING_DIMENSION } from "@/lib/voyage";
+import type { SupportedLanguageCode } from "@/lib/languages";
 
 export interface ChunkMetadata extends RecordMetadata {
   videoId: string;
   youtubeUrl: string;
-  language: string;
+  language: SupportedLanguageCode;
   channel: string;
   videoTitle: string;
   text: string;
@@ -47,17 +48,19 @@ export async function upsertChunks(chunks: ChunkUpsertInput[]) {
 }
 
 export interface RagMatch {
+  videoId: string;
   text: string;
   videoTitle: string;
   channel: string;
   youtubeUrl: string;
   startTime: number;
+  endTime: number;
   score: number;
 }
 
 export async function queryChunks(
   vector: number[],
-  opts: { userId: string; topK?: number; language?: string },
+  opts: { userId: string; topK?: number; language?: SupportedLanguageCode },
 ): Promise<RagMatch[]> {
   const index = getIndex();
 
@@ -80,11 +83,13 @@ export async function queryChunks(
     .map((match) => {
       const metadata = match.metadata as ChunkMetadata;
       return {
+        videoId: metadata.videoId,
         text: metadata.text,
         videoTitle: metadata.videoTitle,
         channel: metadata.channel,
         youtubeUrl: metadata.youtubeUrl,
         startTime: metadata.startTime,
+        endTime: metadata.endTime,
         score: match.score ?? 0,
       };
     });

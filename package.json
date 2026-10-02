@@ -9,6 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:evals": "vitest run src/lib/evals --config vitest.evals.config.ts",
+    "test:evals:retrieval": "vitest run src/lib/evals/retrieval.test.ts --config vitest.evals.config.ts",
+    "eval:label": "tsx scripts/find-phrase-occurrences.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "setup:pinecone": "tsx scripts/setup-pinecone.ts"
