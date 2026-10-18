@@ -1,4 +1,4 @@
-import { FOCUS_RING } from "@/components/ui/styles";
+import { TEXT_LINK } from "@/components/ui/styles";
 
 interface HeaderProps {
   displayName: string;
@@ -27,7 +27,7 @@ export function Header({ displayName }: HeaderProps) {
         </span>
         <a
           href="/auth/logout"
-          className={`normal-case tracking-normal text-muted underline-offset-4 hover:text-ink hover:underline ${FOCUS_RING} rounded`}
+          className={`normal-case tracking-normal text-muted ${TEXT_LINK}`}
         >
           Log out
         </a>

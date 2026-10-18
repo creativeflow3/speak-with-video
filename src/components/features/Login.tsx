@@ -1,5 +1,5 @@
 import { buttonClasses } from "@/components/ui/button";
-import { FOCUS_RING } from "@/components/ui/styles";
+import { TEXT_LINK } from "@/components/ui/styles";
 
 export function Login() {
   return (
@@ -29,7 +29,7 @@ export function Login() {
           {/* Redirects to Auth0 to log in */}
           <a
             href="/auth/login"
-            className={`text-sm text-muted underline-offset-4 hover:text-ink hover:underline ${FOCUS_RING} rounded`}
+            className={`text-sm text-muted ${TEXT_LINK}`}
           >
             Already have an account? Log in
           </a>
