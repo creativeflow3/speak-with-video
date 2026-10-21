@@ -56,13 +56,19 @@ export const ankiList = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id),
-    ankiListName: text("anki_list_name"),
+    ankiListName: text("anki_list_name").notNull(),
+    isDefault: boolean("is_default").notNull().default(false),
     deleted: boolean("deleted").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("anki_list_user_id_deleted_idx").on(table.userId, table.deleted),
-    uniqueIndex("anki_list_active_per_user_idx").on(table.userId).where(sql`deleted = false`),
+    uniqueIndex("anki_list_default_per_user_idx")
+      .on(table.userId)
+      .where(sql`is_default = true AND deleted = false`),
+    uniqueIndex("anki_list_name_per_user_idx")
+      .on(table.userId, sql`lower(${table.ankiListName})`)
+      .where(sql`deleted = false`),
   ],
 );
 

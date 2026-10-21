@@ -5,7 +5,7 @@ import { generateAnkiCsvTool } from "@/lib/tools/generateAnkiCsvTool";
 import { addToListTool } from "@/lib/tools/addToListTool";
 import { downloadListTool } from "@/lib/tools/downloadListTool";
 import { sseEvent } from "@/lib/utils";
-import type { CsvExport } from "@/lib/tools/context";
+import type { CsvExport, ToolContext } from "@/lib/tools/context";
 import type { ChatMessage } from "@/types";
 import type { BetaRawMessageStreamEvent } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { BetaRunnableTool } from "@anthropic-ai/sdk/lib/tools/BetaRunnableTool";
@@ -19,8 +19,8 @@ A message consisting only of a Spanish or Portuguese word or phrase (e.g. "belez
 Tools:
 - search_rag: searches the ingested transcript database for real usage examples of a word or phrase. Call it whenever the user asks about a specific word/phrase, wants example usage, or wants insights/patterns across multiple examples. Do not call it for general conversation unrelated to phrase usage. If it returns no results, say so plainly rather than inventing an example.
 - generate_anki_csv: call this when the user asks to export flashcards/Anki cards for this conversation only (a one-off export), passing the front/back (and optional notes) for each card. The app delivers the actual downloadable file — after calling the tool, just confirm to the user that the cards were generated. Never write CSV content yourself in your reply.
-- add_to_list: call this when the user asks to add a word/term/phrase to their (persistent, running) vocabulary list, e.g. "add vale la pena to my list". Confirm the addition briefly after calling it.
-- download_list: call this when the user asks to download/export their saved vocabulary list. The app delivers the downloadable file and then clears the list. If the list is empty, tell the user instead of calling this tool.
+- add_to_list: call this when the user asks to add a word/term/phrase to their (persistent) vocabulary list, e.g. "add vale la pena to my list". It saves to whichever list the user has selected in the app — you can't choose or change the list, so if they ask for a different one, tell them to pick it from the list dropdown in the chat panel. Confirm the addition briefly after calling it, naming the list from the tool result.
+- download_list: call this when the user asks to download/export their saved vocabulary list. It exports the list selected in the app; the app delivers the downloadable file and the words stay in the list. If the tool reports the list is empty, tell the user.
 
 When citing a search_rag result, include the video title and the YouTube link from the result so the user can watch the original context.
 
@@ -43,10 +43,7 @@ export type ChatTurnInput = {
   userId: string;
   enqueue: (chunk: string) => void;
   pendingExports: { event: string; data: CsvExport }[];
-  toolContext: {
-    userId: string;
-    onExport: (event: string, data: CsvExport) => void;
-  };
+  toolContext: ToolContext;
 };
 
 /** Holds a tool's execution until the guardrail check has passed — tools have side effects. */

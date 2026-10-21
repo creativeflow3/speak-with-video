@@ -70,6 +70,22 @@ body {
   background-size: 100% 6px;
 }
 
+/* The same scrubber rail stood on end, for the dashboard nav: ticks run down
+   the left edge and the active link carries the amber playhead. */
+.tick-rail-vertical {
+  position: relative;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--line) 0,
+    var(--line) 1px,
+    transparent 1px,
+    transparent 10px
+  );
+  background-position: top left;
+  background-repeat: repeat-y;
+  background-size: 6px 100%;
+}
+
 .tick-rail::after {
   content: "";
   position: absolute;

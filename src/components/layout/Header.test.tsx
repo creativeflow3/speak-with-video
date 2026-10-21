@@ -19,6 +19,11 @@ describe("Header", () => {
     );
   });
 
+  it("links to the dashboard", () => {
+    render(<Header displayName="Ada Lovelace" />);
+    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
+  });
+
   it("renders the app name", () => {
     render(<Header displayName="Ada Lovelace" />);
     expect(screen.getByRole("heading", { name: "Speak With Video" })).toBeInTheDocument();

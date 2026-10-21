@@ -147,6 +147,25 @@ describe("ChatPanel", () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
   });
 
+  it("sends the selected list's id with each message", async () => {
+    window.localStorage.clear();
+    fetchMock.mockResolvedValue({ ok: true, body: streamOf() });
+    render(
+      <ChatPanel
+        lists={[
+          { id: "list-default", name: "Default", isDefault: true },
+          { id: "list-travel", name: "Travel", isDefault: false },
+        ]}
+      />,
+    );
+
+    await userEvent.selectOptions(screen.getByLabelText("Saving to"), "list-travel");
+    await sendQuery("add vale la pena to my list");
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init.body)).toEqual(expect.objectContaining({ listId: "list-travel" }));
+  });
+
   it("disables the send button while a request is in flight", async () => {
     let resolveFetch: (value: unknown) => void = () => {};
     fetchMock.mockReturnValue(

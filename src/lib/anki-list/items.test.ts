@@ -1,134 +1,135 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ankiList, ankiListItems } from "@/db/schema";
-import { addListItem, downloadAndClearList } from "./items";
+import { ankiListItems } from "@/db/schema";
+import { addListItem, clearListItems, deleteListItem, exportList, getListWithItems, listItems } from "./items";
+import { getList, resolveListForUser, ListNotFoundError } from "./lists";
+import { argsOf, queryChain } from "./testUtils";
 
 const mocks = vi.hoisted(() => ({
   select: vi.fn(),
   insert: vi.fn(),
   update: vi.fn(),
-  transaction: vi.fn(),
-  insertItemsValues: vi.fn(() => Promise.resolve(undefined)),
 }));
 
 vi.mock("@/db", () => ({ db: mocks }));
+vi.mock("./lists", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./lists")>()),
+  getList: vi.fn(),
+  resolveListForUser: vi.fn(),
+}));
 
-function selectChain(rows: { id: string }[]) {
-  return { from: () => ({ where: () => ({ limit: () => Promise.resolve(rows) }) }) };
-}
+const TRAVEL_ID = "22222222-2222-4222-8222-222222222222";
+const OTHER_ID = "33333333-3333-4333-8333-333333333333";
+const ITEM_ID = "44444444-4444-4444-8444-444444444444";
 
-function insertListChain(rows: { id: string }[]) {
-  return { values: () => ({ onConflictDoNothing: () => ({ returning: () => Promise.resolve(rows) }) }) };
-}
-
-const insertItemsChain = { values: mocks.insertItemsValues };
-
-function updateItemsChain(rows: { front: string; back: string; notes: string | null }[]) {
-  return { set: () => ({ where: () => ({ returning: () => Promise.resolve(rows) }) }) };
-}
-
-function updateListChain() {
-  return { set: () => ({ where: () => Promise.resolve(undefined) }) };
-}
+const travelList = { id: TRAVEL_ID, name: "Travel", isDefault: false };
+const holaRow = { id: ITEM_ID, front: "hola", back: "hi", notes: null };
+const holaItem = { id: ITEM_ID, front: "hola", back: "hi", notes: undefined };
 
 beforeEach(() => {
-  mocks.select.mockReset();
-  mocks.insert.mockReset();
-  mocks.update.mockReset();
-  mocks.transaction.mockReset();
-  mocks.insertItemsValues.mockClear();
+  vi.resetAllMocks();
+  vi.mocked(getList).mockResolvedValue(travelList);
+  vi.mocked(resolveListForUser).mockResolvedValue(travelList);
+  mocks.select.mockReturnValue(queryChain([])); // also builds the owned-list subqueries
 });
 
 describe("addListItem", () => {
-  it("adds the card to the existing active list", async () => {
-    mocks.select.mockReturnValue(selectChain([{ id: "list-1" }]));
-    mocks.insert.mockReturnValue(insertItemsChain);
+  it("adds the card to the resolved list and returns that list", async () => {
+    const insert = queryChain(undefined);
+    mocks.insert.mockReturnValue(insert);
 
-    await addListItem("user-1", { front: "vale la pena", back: "it's worth it" });
+    const list = await addListItem("user-1", { front: "vale la pena", back: "it's worth it" }, TRAVEL_ID);
 
-    expect(mocks.insert).toHaveBeenCalledTimes(1);
+    expect(resolveListForUser).toHaveBeenCalledWith("user-1", TRAVEL_ID);
     expect(mocks.insert).toHaveBeenCalledWith(ankiListItems);
-    expect(mocks.insertItemsValues).toHaveBeenCalledWith({
-      ankiListId: "list-1",
-      front: "vale la pena",
-      back: "it's worth it",
-      notes: null,
-    });
+    expect(argsOf(insert, "values")).toEqual([
+      { ankiListId: TRAVEL_ID, front: "vale la pena", back: "it's worth it", notes: null },
+    ]);
+    expect(list).toEqual(travelList);
   });
 
-  it("defaults notes to null when not provided, and passes it through when given", async () => {
-    mocks.select.mockReturnValue(selectChain([{ id: "list-1" }]));
-    mocks.insert.mockReturnValue(insertItemsChain);
+  it("passes notes through when given", async () => {
+    const insert = queryChain(undefined);
+    mocks.insert.mockReturnValue(insert);
 
     await addListItem("user-1", { front: "hola", back: "hi", notes: "ep 3" });
 
-    expect(mocks.insertItemsValues).toHaveBeenCalledWith(expect.objectContaining({ notes: "ep 3" }));
-  });
-
-  it("creates a new active list when none exists, then adds the card to it", async () => {
-    mocks.select.mockReturnValue(selectChain([]));
-    mocks.insert.mockImplementation((table) =>
-      table === ankiList ? insertListChain([{ id: "list-new" }]) : insertItemsChain,
-    );
-
-    await addListItem("user-1", { front: "hola", back: "hi" });
-
-    expect(mocks.insert).toHaveBeenCalledTimes(2);
-    expect(mocks.insert).toHaveBeenCalledWith(ankiList);
-    expect(mocks.insert).toHaveBeenCalledWith(ankiListItems);
-    expect(mocks.insertItemsValues).toHaveBeenCalledWith(
-      expect.objectContaining({ ankiListId: "list-new" }),
-    );
-  });
-
-  it("falls back to the winning row when it loses the create-list race", async () => {
-    mocks.select
-      .mockReturnValueOnce(selectChain([])) // no active list yet
-      .mockReturnValueOnce(selectChain([{ id: "list-winner" }])); // re-lookup after a lost conflict
-    mocks.insert.mockImplementation((table) =>
-      table === ankiList ? insertListChain([]) : insertItemsChain,
-    );
-
-    await addListItem("user-1", { front: "hola", back: "hi" });
-
-    expect(mocks.select).toHaveBeenCalledTimes(2);
-    expect(mocks.insertItemsValues).toHaveBeenCalledWith(
-      expect.objectContaining({ ankiListId: "list-winner" }),
-    );
+    expect(argsOf(insert, "values")).toEqual([expect.objectContaining({ notes: "ep 3" })]);
   });
 });
 
-describe("downloadAndClearList", () => {
-  beforeEach(() => {
-    mocks.transaction.mockImplementation((callback: (tx: typeof mocks) => unknown) => callback(mocks));
+describe("getListWithItems / listItems", () => {
+  it("returns the list alongside its words, mapping null notes to undefined", async () => {
+    mocks.select.mockReturnValue(queryChain([holaRow, { ...holaRow, id: OTHER_ID, notes: "ep 3" }]));
+
+    await expect(getListWithItems("user-1", TRAVEL_ID)).resolves.toEqual({
+      list: travelList,
+      items: [holaItem, { ...holaItem, id: OTHER_ID, notes: "ep 3" }],
+    });
   });
 
-  it("returns an empty array without updating anything when there is no active list", async () => {
-    mocks.select.mockReturnValue(selectChain([]));
+  it("rejects when the user doesn't own the list", async () => {
+    vi.mocked(getList).mockRejectedValue(new ListNotFoundError());
 
-    const result = await downloadAndClearList("user-1");
+    await expect(listItems("user-1", OTHER_ID)).rejects.toBeInstanceOf(ListNotFoundError);
+  });
 
-    expect(result).toEqual([]);
+  it("rejects a malformed id without querying", async () => {
+    await expect(getListWithItems("user-1", "not-a-uuid")).rejects.toBeInstanceOf(ListNotFoundError);
+    expect(mocks.select).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleteListItem", () => {
+  it("returns true when a word was soft-deleted", async () => {
+    mocks.update.mockReturnValue(queryChain([{ id: ITEM_ID }]));
+
+    await expect(deleteListItem("user-1", TRAVEL_ID, ITEM_ID)).resolves.toBe(true);
+    expect(mocks.update).toHaveBeenCalledWith(ankiListItems);
+  });
+
+  it("returns false when nothing matched (wrong owner, wrong list, or already removed)", async () => {
+    mocks.update.mockReturnValue(queryChain([]));
+
+    await expect(deleteListItem("user-1", TRAVEL_ID, ITEM_ID)).resolves.toBe(false);
+  });
+
+  it("returns false for malformed ids without writing", async () => {
+    await expect(deleteListItem("user-1", TRAVEL_ID, "nope")).resolves.toBe(false);
     expect(mocks.update).not.toHaveBeenCalled();
   });
+});
 
-  it("marks the active list and its items deleted, and returns the exported cards", async () => {
-    mocks.select.mockReturnValue(selectChain([{ id: "list-1" }]));
-    mocks.update.mockImplementation((table) =>
-      table === ankiListItems
-        ? updateItemsChain([
-            { front: "vale la pena", back: "it's worth it", notes: null },
-            { front: "de nada", back: "you're welcome", notes: "ep 3" },
-          ])
-        : updateListChain(),
-    );
+describe("clearListItems", () => {
+  it("soft-deletes every word in one owned-list update and returns how many", async () => {
+    mocks.update.mockReturnValue(queryChain([{ id: "a" }, { id: "b" }]));
 
-    const result = await downloadAndClearList("user-1");
+    await expect(clearListItems("user-1", TRAVEL_ID)).resolves.toBe(2);
+    expect(getList).not.toHaveBeenCalled();
+  });
 
-    expect(result).toEqual([
-      { front: "vale la pena", back: "it's worth it", notes: undefined },
-      { front: "de nada", back: "you're welcome", notes: "ep 3" },
-    ]);
-    expect(mocks.update).toHaveBeenCalledWith(ankiListItems);
-    expect(mocks.update).toHaveBeenCalledWith(ankiList);
+  it("returns 0 for an owned list that was already empty", async () => {
+    mocks.update.mockReturnValue(queryChain([]));
+
+    await expect(clearListItems("user-1", TRAVEL_ID)).resolves.toBe(0);
+    expect(getList).toHaveBeenCalledWith("user-1", TRAVEL_ID);
+  });
+
+  it("rejects when nothing was cleared because the user doesn't own the list", async () => {
+    mocks.update.mockReturnValue(queryChain([]));
+    vi.mocked(getList).mockRejectedValue(new ListNotFoundError());
+
+    await expect(clearListItems("user-1", OTHER_ID)).rejects.toBeInstanceOf(ListNotFoundError);
+  });
+});
+
+describe("exportList", () => {
+  it("returns the resolved list and its cards without clearing anything", async () => {
+    mocks.select.mockReturnValue(queryChain([holaRow]));
+
+    const result = await exportList("user-1", TRAVEL_ID);
+
+    expect(resolveListForUser).toHaveBeenCalledWith("user-1", TRAVEL_ID);
+    expect(result).toEqual({ list: travelList, cards: [holaItem] });
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 });

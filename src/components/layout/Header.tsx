@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { TEXT_LINK } from "@/components/ui/styles";
 
 interface HeaderProps {
@@ -22,6 +23,15 @@ export function Header({ displayName }: HeaderProps) {
 
       <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-muted sm:pt-1">
         <span className="text-ink">Welcome, {displayName}</span>
+        <span aria-hidden className="text-line">
+          ·
+        </span>
+        <Link
+          href="/dashboard"
+          className={`normal-case tracking-normal text-muted ${TEXT_LINK}`}
+        >
+          Dashboard
+        </Link>
         <span aria-hidden className="text-line">
           ·
         </span>

@@ -8,6 +8,12 @@ type LogEvent =
   | "anki_export"
   | "list_add"
   | "list_download"
+  | "list_created"
+  | "list_deleted"
+  | "list_cleared"
+  | "list_item_deleted"
+  | "password_reset_requested"
+  | "route_error"
   | "guardrail_blocked"
   | "guardrail_check_failed";
 
@@ -19,4 +25,9 @@ export function log(event: LogEvent, data: Record<string, unknown> = {}) {
       ...data,
     }),
   );
+}
+
+/** Logs an unexpected error caught at a route or page boundary. */
+export function logRouteError(route: string, err: unknown) {
+  log("route_error", { route, message: err instanceof Error ? err.message : String(err) });
 }

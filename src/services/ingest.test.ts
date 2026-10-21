@@ -7,6 +7,7 @@ import {
   markVideoFailed,
   markVideoSucceeded,
   recordTranscriptApiUsage,
+  listOwnedVideos,
   type Video,
 } from "./ingest.service";
 
@@ -125,5 +126,24 @@ describe("recordTranscriptApiUsage", () => {
     await recordTranscriptApiUsage("abc", false);
 
     expect(mocks.insertUsageValues).toHaveBeenCalledWith({ videoId: "abc", succeeded: false });
+  });
+});
+
+describe("listOwnedVideos", () => {
+  it("selects only the dashboard's columns for the owner, newest first", async () => {
+    const rows = [{ id: "v1", title: "Episode 1", status: "succeeded" }];
+    const select = vi.fn(() => ({
+      from: () => ({ where: () => ({ orderBy: () => Promise.resolve(rows) }) }),
+    }));
+    mocks.select.mockImplementation(select);
+
+    const result = await listOwnedVideos("user-1");
+
+    expect(result).toEqual(rows);
+    const columns = Object.keys((select.mock.calls[0] as unknown[])[0] as object);
+    expect(columns).toEqual([
+      "id", "title", "channel", "language", "status", "failureReason",
+      "chunkCount", "visibility", "youtubeUrl", "createdAt",
+    ]);
   });
 });

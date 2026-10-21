@@ -1,5 +1,29 @@
 import { describe, it, expect } from "vitest";
-import { parseSseChunk } from "./utils";
+import { isUuid, parseSseChunk, pluralize } from "./utils";
+
+describe("pluralize", () => {
+  it.each([
+    [0, "0 words"],
+    [1, "1 word"],
+    [2, "2 words"],
+  ])("%i → %s", (count, expected) => {
+    expect(pluralize(count, "word")).toBe(expected);
+  });
+
+  it("uses an explicit plural form", () => {
+    expect(pluralize(2, "entry", "entries")).toBe("2 entries");
+  });
+});
+
+describe("isUuid", () => {
+  it("accepts a v4 uuid", () => {
+    expect(isUuid("6f1c2b0e-8a4d-4c1e-9f3a-2b7d5e8c9a10")).toBe(true);
+  });
+
+  it.each([["not-a-uuid"], [""], [42], [undefined]])("rejects %j", (value) => {
+    expect(isUuid(value)).toBe(false);
+  });
+});
 
 describe("parseSseChunk", () => {
   it("parses a single complete frame", () => {

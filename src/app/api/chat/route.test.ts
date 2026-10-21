@@ -180,6 +180,13 @@ describe("POST /api/chat", () => {
     expect(body).not.toContain("event: done");
   });
 
+  it("puts the body's listId into the tool context (the list lib validates it and falls back to Default)", async () => {
+    const listId = "6f1c2b0e-8a4d-4c1e-9f3a-2b7d5e8c9a10";
+    await readStream(await POST(makeRequest({ query: "hola", listId })));
+
+    expect(lastCallInput().toolContext.listId).toBe(listId);
+  });
+
   it("gives toolDispatcher an enqueue function and a mutable pendingExports/toolContext pair", async () => {
     await readStream(await POST(makeRequest({ query: "hola" })));
 

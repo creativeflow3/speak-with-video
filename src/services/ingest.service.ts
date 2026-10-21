@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { videos, transcriptApiUsage, type VideoVisibility } from "@/db/schema";
 
@@ -54,6 +54,26 @@ export async function markVideoSucceeded(videoId: string, input: MarkVideoSuccee
     chunkCount: input.chunkCount,
     failureReason: null,
   });
+}
+
+const OWNED_VIDEO_COLUMNS = {
+  id: videos.id,
+  title: videos.title,
+  channel: videos.channel,
+  language: videos.language,
+  status: videos.status,
+  failureReason: videos.failureReason,
+  chunkCount: videos.chunkCount,
+  visibility: videos.visibility,
+  youtubeUrl: videos.youtubeUrl,
+  createdAt: videos.createdAt,
+};
+
+export type OwnedVideo = Pick<Video, keyof typeof OWNED_VIDEO_COLUMNS>;
+
+/** Videos this user ingested first, newest first — only the columns the dashboard shows, to keep egress low. */
+export async function listOwnedVideos(ownerId: string): Promise<OwnedVideo[]> {
+  return db.select(OWNED_VIDEO_COLUMNS).from(videos).where(eq(videos.ownerId, ownerId)).orderBy(desc(videos.createdAt));
 }
 
 export async function recordTranscriptApiUsage(videoId: string, succeeded: boolean): Promise<void> {

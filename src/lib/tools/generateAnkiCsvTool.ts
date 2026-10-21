@@ -2,6 +2,7 @@ import { z } from "zod";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { generateAnkiCsv, type AnkiCard } from "@/lib/anki";
 import { log } from "@/lib/logger";
+import { pluralize } from "@/lib/utils";
 import type { ToolContext } from "./context";
 
 export function generateAnkiCsvTool(context: ToolContext) {
@@ -23,7 +24,7 @@ export function generateAnkiCsvTool(context: ToolContext) {
       const csv = generateAnkiCsv(cards as AnkiCard[]);
       context.onExport("anki_csv", { csv, cardCount: cards.length });
       log("anki_export", { cardCount: cards.length });
-      return `Generated ${cards.length} card${cards.length === 1 ? "" : "s"}.`;
+      return `Generated ${pluralize(cards.length, "card")}.`;
     },
   });
 }

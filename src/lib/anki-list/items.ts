@@ -1,57 +1,97 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { ankiList, ankiListItems } from "@/db/schema";
 import type { AnkiCard } from "@/lib/anki";
+import { isUuid } from "@/lib/utils";
+import { getList, resolveListForUser, ListNotFoundError, type AnkiListRef } from "./lists";
 
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-type Executor = typeof db | Transaction;
-
-async function findActiveListId(executor: Executor, userId: string): Promise<string | undefined> {
-  const [row] = await executor
-    .select({ id: ankiList.id })
-    .from(ankiList)
-    .where(and(eq(ankiList.userId, userId), eq(ankiList.deleted, false)))
-    .limit(1);
-  return row?.id;
+export interface AnkiListItem extends AnkiCard {
+  id: string;
 }
 
-async function createActiveList(userId: string): Promise<string> {
-  const [created] = await db
-    .insert(ankiList)
-    .values({ userId })
-    .onConflictDoNothing({ target: ankiList.userId, where: sql`deleted = false` })
-    .returning({ id: ankiList.id });
-  if (created) return created.id;
-
-  // Lost the race to a concurrent insert — the winner's row is now the active list.
-  return (await findActiveListId(db, userId))!;
+export interface ListExport {
+  list: AnkiListRef;
+  cards: AnkiCard[];
 }
 
-export async function addListItem(userId: string, card: AnkiCard): Promise<void> {
-  const ankiListId = (await findActiveListId(db, userId)) ?? (await createActiveList(userId));
+function activeItemsOf(listId: string) {
+  return and(eq(ankiListItems.ankiListId, listId), eq(ankiListItems.deleted, false));
+}
+
+/** Folds the ownership check into a write: matches the list only if this user owns it and it's active. */
+function ownedListId(userId: string, listId: string) {
+  return inArray(
+    ankiListItems.ankiListId,
+    db
+      .select({ id: ankiList.id })
+      .from(ankiList)
+      .where(and(eq(ankiList.id, listId), eq(ankiList.userId, userId), eq(ankiList.deleted, false))),
+  );
+}
+
+/** Adds a card to the chosen list, falling back to Default; returns the list it landed in. */
+export async function addListItem(userId: string, card: AnkiCard, listId?: string): Promise<AnkiListRef> {
+  const list = await resolveListForUser(userId, listId);
   await db.insert(ankiListItems).values({
-    ankiListId,
+    ankiListId: list.id,
     front: card.front,
     back: card.back,
     notes: card.notes ?? null,
   });
+  return list;
 }
 
-/** Reads and soft-deletes the user's active list and its items together, resetting their running list. */
-export async function downloadAndClearList(userId: string): Promise<AnkiCard[]> {
-  return db.transaction(async (tx) => {
-    const ankiListId = await findActiveListId(tx, userId);
-    if (!ankiListId) return [];
+async function selectItems(listId: string): Promise<AnkiListItem[]> {
+  const rows = await db
+    .select({ id: ankiListItems.id, front: ankiListItems.front, back: ankiListItems.back, notes: ankiListItems.notes })
+    .from(ankiListItems)
+    .where(activeItemsOf(listId))
+    .orderBy(asc(ankiListItems.createdAt));
+  return rows.map((row) => ({ ...row, notes: row.notes ?? undefined }));
+}
 
-    const [itemRows] = await Promise.all([
-      tx
-        .update(ankiListItems)
-        .set({ deleted: true })
-        .where(and(eq(ankiListItems.ankiListId, ankiListId), eq(ankiListItems.deleted, false)))
-        .returning({ front: ankiListItems.front, back: ankiListItems.back, notes: ankiListItems.notes }),
-      tx.update(ankiList).set({ deleted: true }).where(eq(ankiList.id, ankiListId)),
-    ]);
+/** One of the user's lists with its words. Throws ListNotFoundError if they don't own it. */
+export async function getListWithItems(
+  userId: string,
+  listId: string,
+): Promise<{ list: AnkiListRef; items: AnkiListItem[] }> {
+  if (!isUuid(listId)) throw new ListNotFoundError();
+  // In parallel: if the ownership check fails, the items read is discarded unseen.
+  const [list, items] = await Promise.all([getList(userId, listId), selectItems(listId)]);
+  return { list, items };
+}
 
-    return itemRows.map((row) => ({ front: row.front, back: row.back, notes: row.notes ?? undefined }));
-  });
+/** The words in one of the user's lists. Throws ListNotFoundError if they don't own it. */
+export async function listItems(userId: string, listId: string): Promise<AnkiListItem[]> {
+  return (await getListWithItems(userId, listId)).items;
+}
+
+/** Soft-deletes one word, only if it sits in an active list this user owns. Returns whether it was removed. */
+export async function deleteListItem(userId: string, listId: string, itemId: string): Promise<boolean> {
+  if (!isUuid(listId) || !isUuid(itemId)) return false;
+  const removed = await db
+    .update(ankiListItems)
+    .set({ deleted: true })
+    .where(and(eq(ankiListItems.id, itemId), activeItemsOf(listId), ownedListId(userId, listId)))
+    .returning({ id: ankiListItems.id });
+  return removed.length > 0;
+}
+
+/** Soft-deletes every word in one of the user's lists — how the Default list gets emptied. */
+export async function clearListItems(userId: string, listId: string): Promise<number> {
+  if (!isUuid(listId)) throw new ListNotFoundError();
+  const cleared = await db
+    .update(ankiListItems)
+    .set({ deleted: true })
+    .where(and(activeItemsOf(listId), ownedListId(userId, listId)))
+    .returning({ id: ankiListItems.id });
+  // Nothing cleared is either an empty list or one the user doesn't own — only then is the lookup worth it.
+  if (cleared.length === 0) await getList(userId, listId);
+  return cleared.length;
+}
+
+/** Reads the chosen list (or Default) for export. Unlike the old download, nothing is cleared. */
+export async function exportList(userId: string, listId?: string): Promise<ListExport> {
+  const list = await resolveListForUser(userId, listId);
+  return { list, cards: await selectItems(list.id) };
 }

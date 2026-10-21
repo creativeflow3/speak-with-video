@@ -3,10 +3,14 @@
 import { memo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
-import { FOCUS_RING } from "@/components/ui/styles";
+import { FOCUS_RING, TEXT_INPUT } from "@/components/ui/styles";
 import { splitYouTubeLinks } from "@/lib/youtube";
 import { parseSseChunk } from "@/lib/utils";
 import type { ChatMessage, SseFrame } from "@/types";
+import type { AnkiListRef } from "@/lib/anki-list";
+import { ListPicker, useSelectedList } from "./ListPicker";
+import { downloadCsv } from "./downloadCsv";
+import { errorMessageFor } from "./apiErrors";
 
 interface CsvExport {
   csv: string;
@@ -59,15 +63,22 @@ async function readSseFrames(body: ReadableStream<Uint8Array>, onFrame: (frame: 
   }
 }
 
-async function errorTextFor(res: Response): Promise<string> {
-  const data = await res.json().catch(() => ({}));
-  if (data.error) return data.error;
-  return res.status === 429
-    ? "You're sending messages too quickly. Wait a bit and try again."
-    : "Something went wrong reaching the server. Try sending that again.";
+const CHAT_ERRORS = {
+  rateLimited: "You're sending messages too quickly. Wait a bit and try again.",
+  fallback: "Something went wrong reaching the server. Try sending that again.",
+};
+
+function errorTextFor(res: Response): Promise<string> {
+  return errorMessageFor(res, CHAT_ERRORS);
 }
 
-export function ChatPanel() {
+interface ChatPanelProps {
+  /** The user's vocabulary lists, loaded on the server; empty hides the picker. */
+  lists?: AnkiListRef[];
+}
+
+export function ChatPanel({ lists = [] }: ChatPanelProps) {
+  const [listId, selectList] = useSelectedList(lists);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -109,36 +120,29 @@ export function ChatPanel() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, messages: history }),
+        body: JSON.stringify({ query, messages: history, listId }),
       });
       if (!res.ok) setAssistantReply(await errorTextFor(res));
       else if (res.body) await readSseFrames(res.body, makeFrameHandler());
     } catch {
-      setAssistantReply("Something went wrong reaching the server. Try sending that again.");
+      setAssistantReply(CHAT_ERRORS.fallback);
     } finally {
       setLoading(false);
       setStatus(null);
     }
   }
 
-  function downloadCsv(csv: string, filename: string) {
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   return (
     <Panel className="flex flex-1 flex-col gap-4 lg:min-h-[520px]">
-      <div>
-        <h2 className="font-display text-xl italic text-ink">Find a phrase</h2>
-        <p className="mt-1 text-sm text-muted">
-          Ask how something is really said — we&apos;ll pull it from the videos you&apos;ve
-          added.
-        </p>
+      <div className="flex flex-col gap-3">
+        <div>
+          <h2 className="font-display text-xl italic text-ink">Find a phrase</h2>
+          <p className="mt-1 text-sm text-muted">
+            Ask how something is really said — we&apos;ll pull it from the videos you&apos;ve
+            added.
+          </p>
+        </div>
+        <ListPicker lists={lists} selectedId={listId} onSelect={selectList} />
       </div>
 
       <div className="flex-1 overflow-y-auto rounded-lg border border-line bg-canvas/40 p-3">
@@ -202,7 +206,7 @@ export function ChatPanel() {
           placeholder='Try: "vale la pena"'
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          className={`flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-ink ${FOCUS_RING}`}
+          className={`flex-1 ${TEXT_INPUT}`}
         />
         <Button type="submit" disabled={loading}>
           {loading ? "…" : "Send"}

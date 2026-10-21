@@ -3,6 +3,20 @@ import { ChatPanel } from "@/components/features/ChatPanel";
 import { Login } from "@/components/features/Login";
 import { Header } from "@/components/layout/Header";
 import { auth0 } from "@/lib/auth0";
+import { getSessionUser } from "@/lib/authz";
+import { listListRefs, type AnkiListRef } from "@/lib/anki-list";
+import { logRouteError } from "@/lib/logger";
+
+/** The picker is a convenience — if lists can't load, chat still works and saves to Default. */
+async function loadPickerLists(): Promise<AnkiListRef[]> {
+  try {
+    const user = await getSessionUser();
+    return user ? await listListRefs(user.id) : [];
+  } catch (err) {
+    logRouteError("/", err);
+    return [];
+  }
+}
 
 export default async function Home() {
   const session = await auth0.getSession();
@@ -12,6 +26,7 @@ export default async function Home() {
   }
 
   const displayName = session.user.name ?? session.user.email ?? "there";
+  const lists = await loadPickerLists();
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-canvas text-ink">
@@ -21,7 +36,7 @@ export default async function Home() {
 
       <main className="mx-auto grid w-full max-w-5xl flex-1 items-start gap-4 px-4 py-6 lg:grid-cols-[320px_1fr] lg:gap-6 lg:px-6">
         <IngestForm />
-        <ChatPanel />
+        <ChatPanel lists={lists} />
       </main>
     </div>
   );

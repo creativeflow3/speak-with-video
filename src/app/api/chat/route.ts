@@ -4,7 +4,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { checkGuardrails } from "@/lib/guardrails";
 import { toolDispatcher, type ChatTurnInput } from "@/lib/tool-dispatcher";
 import { sseEvent } from "@/lib/utils";
-import type { CsvExport } from "@/lib/tools/context";
+import type { CsvExport, ToolContext } from "@/lib/tools/context";
 import type { ChatRequestBody } from "@/types";
 
 const MAX_HISTORY_MESSAGES = 20;
@@ -43,6 +43,8 @@ export async function POST(request: Request) {
       content: m.content,
     })),
     userId: auth.id,
+    // Unvalidated client input — a malformed, unknown or someone else's id falls back to Default downstream.
+    listId: body.listId,
     toolsAllowed: guardrail.then((blocked) => !blocked, () => false),
   }, abort);
 
@@ -61,15 +63,18 @@ export async function POST(request: Request) {
   });
 }
 
-type ChatStreamInput = Pick<ChatTurnInput, "query" | "history" | "userId" | "toolsAllowed">;
+type ChatStreamInput = Pick<ChatTurnInput, "query" | "history" | "userId" | "toolsAllowed"> &
+  Pick<ToolContext, "listId">;
 
 /** Starts the model run immediately; its SSE output buffers until the stream is read. */
 function startChatStream(input: ChatStreamInput, abort: AbortController): ReadableStream<Uint8Array> {
   const { signal } = abort;
+  const { listId, ...turn } = input;
   const encoder = new TextEncoder();
   const pendingExports: ChatTurnInput["pendingExports"] = [];
-  const toolContext = {
+  const toolContext: ToolContext = {
     userId: input.userId,
+    listId,
     onExport: (event: string, data: CsvExport) => pendingExports.push({ event, data }),
   };
 
@@ -77,7 +82,7 @@ function startChatStream(input: ChatStreamInput, abort: AbortController): Readab
     async start(controller) {
       const enqueue = (chunk: string) => controller.enqueue(encoder.encode(chunk));
       try {
-        await toolDispatcher({ ...input, signal, enqueue, pendingExports, toolContext });
+        await toolDispatcher({ ...turn, signal, enqueue, pendingExports, toolContext });
         enqueue(sseEvent("done", {}));
       } catch (err) {
         if (!signal.aborted) {

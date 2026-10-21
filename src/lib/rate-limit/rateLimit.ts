@@ -44,8 +44,16 @@ const CHAT_RATE_LIMIT = 20;
 const CHAT_LIMIT_WINDOW = 5 * 60;
 const INGEST_RATE_LIMIT = 15;
 const INGEST_LIMIT_WINDOW = 60 * 60;
+// Each request sends a real email — keep it low enough that it can't be used to spam an inbox.
+const PASSWORD_RESET_RATE_LIMIT = 3;
+const PASSWORD_RESET_LIMIT_WINDOW = 60 * 60;
 
 export const RATE_LIMITS = {
   chat: { route: "chat", limit: CHAT_RATE_LIMIT, windowSeconds: CHAT_LIMIT_WINDOW },
   ingest: { route: "ingest", limit: INGEST_RATE_LIMIT, windowSeconds: INGEST_LIMIT_WINDOW },
+  passwordReset: {
+    route: "password_reset",
+    limit: PASSWORD_RESET_RATE_LIMIT,
+    windowSeconds: PASSWORD_RESET_LIMIT_WINDOW,
+  },
 } as const satisfies Record<string, RateLimitConfig>;

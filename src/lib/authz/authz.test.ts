@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextResponse } from "next/server";
 import { auth0, ROLES_CLAIM } from "@/lib/auth0";
-import { requireSession, requireAdmin, type AuthedUser } from "./authz";
+import { requireSession, requireAdmin, getDashboardUser, type AuthedUser } from "./authz";
 
 const mocks = vi.hoisted(() => {
   const limit = vi.fn();
@@ -18,6 +18,11 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("@/db", () => ({ db: { select: mocks.select, insert: mocks.insert } }));
+vi.mock("next/navigation", () => ({
+  redirect: (url: string) => {
+    throw new Error(`redirect:${url}`);
+  },
+}));
 vi.mock("@/lib/auth0", () => ({
   auth0: { getSession: vi.fn() },
   ROLES_CLAIM: "https://speak-with-video.app/roles",
@@ -114,6 +119,24 @@ describe("requireSession", () => {
     await requireSession();
 
     expect(mocks.values).toHaveBeenCalledWith(expect.objectContaining({ auth0Sub: "auth0|xyz", email: "" }));
+  });
+});
+
+describe("getDashboardUser", () => {
+  it("redirects to login with a returnTo when there is no session", async () => {
+    vi.mocked(auth0.getSession).mockResolvedValue(null);
+
+    await expect(getDashboardUser("/dashboard/lists")).rejects.toThrow(
+      "redirect:/auth/login?returnTo=%2Fdashboard%2Flists",
+    );
+    expect(mocks.limit).not.toHaveBeenCalled();
+  });
+
+  it("returns the database user when signed in", async () => {
+    vi.mocked(auth0.getSession).mockResolvedValue(fakeSession());
+    mocks.limit.mockResolvedValue([existingUser]);
+
+    await expect(getDashboardUser("/dashboard/lists")).resolves.toEqual(existingUser);
   });
 });
 

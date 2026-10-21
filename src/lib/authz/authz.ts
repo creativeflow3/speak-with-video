@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { auth0, ROLES_CLAIM } from "@/lib/auth0";
 import { db } from "@/db";
@@ -16,15 +17,13 @@ function roleFromClaims(user: Record<string, unknown>): UserRole {
   return Array.isArray(roles) && roles.includes("Admin") ? "Admin" : "User";
 }
 
-export async function requireSession(): Promise<AuthedUser | NextResponse> {
-  const session = await auth0.getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-  }
+type SessionUser = NonNullable<Awaited<ReturnType<typeof auth0.getSession>>>["user"];
 
-  const auth0Sub = session.user.sub;
-  const email = session.user.email ?? "";
-  const role = roleFromClaims(session.user);
+/** Finds the database user for an Auth0 session, creating it or syncing a changed email/role. */
+async function upsertSessionUser(sessionUser: SessionUser): Promise<AuthedUser> {
+  const auth0Sub = sessionUser.sub;
+  const email = sessionUser.email ?? "";
+  const role = roleFromClaims(sessionUser);
 
   const [existing] = await db.select().from(users).where(eq(users.auth0Sub, auth0Sub)).limit(1);
   if (existing && existing.email === email && existing.role === role) {
@@ -37,6 +36,28 @@ export async function requireSession(): Promise<AuthedUser | NextResponse> {
     .onConflictDoUpdate({ target: users.auth0Sub, set: { email, role } })
     .returning();
 
+  return user;
+}
+
+/** The signed-in user, or null when there is no session. */
+export async function getSessionUser(): Promise<AuthedUser | null> {
+  const session = await auth0.getSession();
+  return session ? upsertSessionUser(session.user) : null;
+}
+
+/** For API routes: the signed-in user, or a 401 response to return as-is. */
+export async function requireSession(): Promise<AuthedUser | NextResponse> {
+  const user = await getSessionUser();
+  return user ?? NextResponse.json({ error: "Authentication required" }, { status: 401 });
+}
+
+/**
+ * For dashboard pages: the signed-in user, or a redirect to login that returns here afterwards.
+ * Each page calls this itself — layouts don't re-render on navigation, so they can't guard pages.
+ */
+export async function getDashboardUser(returnTo: string): Promise<AuthedUser> {
+  const user = await getSessionUser();
+  if (!user) redirect(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`);
   return user;
 }
 
