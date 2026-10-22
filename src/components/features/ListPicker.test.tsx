@@ -3,7 +3,13 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { AnkiListRef } from "@/lib/anki-list";
-import { ListPicker, useSelectedList } from "./ListPicker";
+import { mockFetch } from "@/components/testUtils";
+import { ListPicker, useListPicker } from "./ListPicker";
+
+const refresh = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }));
+
+const fetchMock = mockFetch();
 
 const LISTS: AnkiListRef[] = [
   { id: "list-default", name: "Default", isDefault: true },
@@ -11,8 +17,7 @@ const LISTS: AnkiListRef[] = [
 ];
 
 function Harness({ lists = LISTS }: { lists?: AnkiListRef[] }) {
-  const [selectedId, onSelect] = useSelectedList(lists);
-  return <ListPicker lists={lists} selectedId={selectedId} onSelect={onSelect} />;
+  return <ListPicker picker={useListPicker(lists)} />;
 }
 
 const picker = () => screen.getByLabelText("Saving to");
@@ -21,6 +26,7 @@ beforeEach(() => window.localStorage.clear());
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  refresh.mockReset();
 });
 
 describe("ListPicker", () => {
@@ -61,6 +67,20 @@ describe("ListPicker", () => {
     await userEvent.selectOptions(picker(), "list-travel");
 
     expect(picker()).toHaveValue("list-travel");
+  });
+
+  it("selects a list created inline, before the page refresh brings it in", async () => {
+    const created = { id: "list-food", name: "Food", isDefault: false };
+    fetchMock.mockResolvedValue({ ok: true, json: () => Promise.resolve({ list: created }) });
+    render(<Harness />);
+
+    await userEvent.click(screen.getByRole("button", { name: "+ New list" }));
+    await userEvent.type(screen.getByLabelText("New list name"), "Food");
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(await screen.findByRole("option", { name: "Food" })).toBeInTheDocument();
+    expect(picker()).toHaveValue("list-food");
+    expect(refresh).toHaveBeenCalled();
   });
 
   it("renders nothing when there are no lists", () => {

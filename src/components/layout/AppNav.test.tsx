@@ -3,33 +3,52 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname } from "next/navigation";
-import { DashboardNavLinks, MobileNav } from "./DashboardNav";
+import { AppNavLinks, MobileNav } from "./AppNav";
 
 vi.mock("next/navigation", () => ({ usePathname: vi.fn() }));
 
 const menuButton = () => screen.getByRole("button", { name: /menu/i });
-const drawer = () => document.getElementById("dashboard-drawer")!;
+const drawer = () => document.getElementById("app-drawer")!;
+const findAPhrase = () => screen.getByRole("link", { name: "Find a Phrase" });
 
 beforeEach(() => vi.mocked(usePathname).mockReturnValue("/dashboard/lists"));
 afterEach(cleanup);
 
-describe("DashboardNavLinks", () => {
-  it("marks the current section with aria-current, including its sub-pages", () => {
-    vi.mocked(usePathname).mockReturnValue("/dashboard/lists/abc");
-    render(<DashboardNavLinks />);
+describe("AppNavLinks", () => {
+  it("lists Find a Phrase first, linking home", () => {
+    render(<AppNavLinks />);
 
-    expect(screen.getByRole("link", { name: "Lists" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Videos" })).not.toHaveAttribute("aria-current");
+    const labels = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(labels).toEqual(["Find a Phrase", "Lists", "Videos", "Account"]);
+    expect(findAPhrase()).toHaveAttribute("href", "/");
   });
 
-  it("links back to Find a phrase", () => {
-    render(<DashboardNavLinks />);
+  it("marks Find a Phrase current on the home page", () => {
+    vi.mocked(usePathname).mockReturnValue("/");
+    render(<AppNavLinks />);
 
-    expect(screen.getByRole("link", { name: "← Back to Find a phrase" })).toHaveAttribute("href", "/");
+    expect(findAPhrase()).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Lists" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("marks the current section with aria-current, including its sub-pages", () => {
+    vi.mocked(usePathname).mockReturnValue("/dashboard/lists/abc");
+    render(<AppNavLinks />);
+
+    expect(screen.getByRole("link", { name: "Lists" })).toHaveAttribute("aria-current", "page");
+    expect(findAPhrase()).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Videos" })).not.toHaveAttribute("aria-current");
   });
 });
 
 describe("MobileNav", () => {
+  it("shows Log out in the top bar, outside the drawer", () => {
+    render(<MobileNav />);
+
+    expect(screen.getByRole("link", { name: "Log out" })).toHaveAttribute("href", "/auth/logout");
+    expect(within(drawer()).queryByRole("link", { name: "Log out" })).not.toBeInTheDocument();
+  });
+
   it("starts closed, with the drawer inert", () => {
     render(<MobileNav />);
 

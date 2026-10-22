@@ -6,6 +6,8 @@ import { sseEvent } from "@/lib/utils";
 import { mockFetch } from "@/components/testUtils";
 import { ChatPanel } from "./ChatPanel";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
+
 const fetchMock = mockFetch();
 const encoder = new TextEncoder();
 

@@ -17,7 +17,8 @@ export function useApiAction() {
   const router = useRouter();
   const [state, setState] = useState<ApiActionState>({ pending: false, error: null });
 
-  async function run(url: string, init: RequestInit): Promise<boolean> {
+  /** `onSuccess` gets the response before the refresh, e.g. to read a created record's id. */
+  async function run(url: string, init: RequestInit, onSuccess?: (res: Response) => Promise<void>): Promise<boolean> {
     setState({ pending: true, error: null });
     try {
       const res = await fetch(url, init);
@@ -25,6 +26,7 @@ export function useApiAction() {
         setState({ pending: false, error: await errorMessageFor(res) });
         return false;
       }
+      await onSuccess?.(res);
       setState({ pending: false, error: null });
       router.refresh();
       return true;

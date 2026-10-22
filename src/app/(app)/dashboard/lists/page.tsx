@@ -4,7 +4,7 @@ import { getDashboardUser } from "@/lib/authz";
 import { listLists, type AnkiListSummary } from "@/lib/anki-list";
 import { Panel } from "@/components/ui/panel";
 import { FOCUS_RING, MONO_LABEL } from "@/components/ui/styles";
-import { DashboardPageHeader } from "@/components/layout/DashboardPageHeader";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { NewListForm } from "@/components/features/dashboard/NewListForm";
 import { DeleteListButton } from "@/components/features/dashboard/ListActions";
 import { pluralize } from "@/lib/utils";
@@ -38,9 +38,9 @@ export default async function ListsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <DashboardPageHeader
+      <PageHeader
         title="Lists"
-        description="Words you save in Find a phrase land in the list picked there. Default is always kept — clear its words instead of deleting it."
+        description="Words you save in Find a Phrase land in the list picked there. Default is always kept — clear its words instead of deleting it."
       />
       <Panel>
         <NewListForm />

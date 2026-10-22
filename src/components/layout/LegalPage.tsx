@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { TEXT_LINK } from "@/components/ui/styles";
+import { EYEBROW, TEXT_LINK } from "@/components/ui/styles";
 import {
   LEGAL_CONTACT_EMAIL,
   LEGAL_CONTACT_MAILTO,
@@ -32,7 +32,7 @@ export function LegalPage({ title, sections }: LegalPageProps) {
         ← Back to {LEGAL_OPERATOR_NAME}
       </Link>
       <h1 className="mt-6 font-display text-4xl italic text-ink sm:text-5xl">{title}</h1>
-      <p className="mt-2 font-mono text-xs uppercase tracking-[0.2em] text-muted">
+      <p className={`mt-2 ${EYEBROW}`}>
         Last updated {LEGAL_LAST_UPDATED}
       </p>
       <div className="tick-rail mt-6 w-full" />

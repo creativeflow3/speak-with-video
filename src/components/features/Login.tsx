@@ -1,11 +1,11 @@
 import { buttonClasses } from "@/components/ui/button";
-import { TEXT_LINK } from "@/components/ui/styles";
+import { EYEBROW, TEXT_LINK } from "@/components/ui/styles";
 
 export function Login() {
   return (
     <div className="flex min-h-full flex-1 flex-col items-center justify-center bg-canvas px-6 py-16 text-ink">
       <div className="w-full max-w-sm text-center">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted">
+        <p className={EYEBROW}>
           Real phrases, real videos
         </p>
         <h1 className="mt-2 font-display text-4xl italic text-ink sm:text-5xl">

@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 
-interface DashboardPageHeaderProps {
+interface PageHeaderProps {
   title: string;
   description?: ReactNode;
   /** Right-aligned controls, e.g. a download button. */
   actions?: ReactNode;
 }
 
-export function DashboardPageHeader({ title, description, actions }: DashboardPageHeaderProps) {
+export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
     <header className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-4">

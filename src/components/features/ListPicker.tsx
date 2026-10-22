@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FOCUS_RING, TEXT_LINK } from "@/components/ui/styles";
 // Type-only, so none of the server-side list code reaches the client bundle.
 import type { AnkiListRef as ListOption } from "@/lib/anki-list";
+import { NewListInline } from "./NewListInline";
 
 const STORAGE_KEY = "swv:chat-list-id";
 
@@ -31,10 +32,10 @@ function subscribeToStorage(onChange: () => void) {
 }
 
 /**
- * The list "Find a phrase" saves to: this visit's pick, else the remembered one, else Default.
+ * The list "Find a Phrase" saves to: this visit's pick, else the remembered one, else Default.
  * A remembered id that's no longer in `lists` (deleted elsewhere) falls back to Default.
  */
-export function useSelectedList(lists: ListOption[]): [string | undefined, (id: string) => void] {
+function useSelectedList(lists: ListOption[]): [string | undefined, (id: string) => void] {
   const stored = useSyncExternalStore(subscribeToStorage, readStoredListId, () => null);
   const [picked, setPicked] = useState<string | null>(null);
 
@@ -49,13 +50,29 @@ export function useSelectedList(lists: ListOption[]): [string | undefined, (id: 
   return [selected?.id, select];
 }
 
-interface ListPickerProps {
+export interface ListPickerState {
   lists: ListOption[];
   selectedId: string | undefined;
-  onSelect: (id: string) => void;
+  select: (id: string) => void;
+  /** Adds a just-created list and selects it, before the server's refreshed `lists` include it. */
+  addCreated: (list: ListOption) => void;
 }
 
-export function ListPicker({ lists, selectedId, onSelect }: ListPickerProps) {
+export function useListPicker(serverLists: ListOption[]): ListPickerState {
+  const [created, setCreated] = useState<ListOption[]>([]);
+  const lists = [...serverLists, ...created.filter((c) => !serverLists.some((l) => l.id === c.id))];
+  const [selectedId, select] = useSelectedList(lists);
+
+  function addCreated(list: ListOption) {
+    setCreated((prev) => [...prev, list]);
+    select(list.id);
+  }
+
+  return { lists, selectedId, select, addCreated };
+}
+
+export function ListPicker({ picker }: { picker: ListPickerState }) {
+  const { lists, selectedId, select, addCreated } = picker;
   if (lists.length === 0) return null;
 
   return (
@@ -64,7 +81,7 @@ export function ListPicker({ lists, selectedId, onSelect }: ListPickerProps) {
       <select
         id="chat-list-picker"
         value={selectedId}
-        onChange={(e) => onSelect(e.target.value)}
+        onChange={(e) => select(e.target.value)}
         className={`max-w-[12rem] truncate rounded-md border border-line bg-surface px-2 py-1 font-sans text-sm normal-case tracking-normal text-ink ${FOCUS_RING}`}
       >
         {lists.map((list) => (
@@ -73,6 +90,7 @@ export function ListPicker({ lists, selectedId, onSelect }: ListPickerProps) {
           </option>
         ))}
       </select>
+      <NewListInline onCreated={addCreated} />
       <Link href="/dashboard/lists" className={TEXT_LINK}>
         Manage lists →
       </Link>

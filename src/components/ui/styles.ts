@@ -6,4 +6,7 @@ export const TEXT_LINK = `underline-offset-4 hover:text-ink hover:underline ${FO
 /** The small uppercase mono label used for field labels, metadata lines and eyebrows. */
 export const MONO_LABEL = "font-mono text-xs uppercase tracking-widest text-muted";
 
+/** The wide-tracked brand eyebrow ("Real phrases, real videos") above the app name. */
+export const EYEBROW = "font-mono text-xs uppercase tracking-[0.2em] text-muted";
+
 export const TEXT_INPUT = `rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-ink ${FOCUS_RING}`;

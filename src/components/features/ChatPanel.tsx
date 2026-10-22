@@ -8,7 +8,7 @@ import { splitYouTubeLinks } from "@/lib/youtube";
 import { parseSseChunk } from "@/lib/utils";
 import type { ChatMessage, SseFrame } from "@/types";
 import type { AnkiListRef } from "@/lib/anki-list";
-import { ListPicker, useSelectedList } from "./ListPicker";
+import { ListPicker, useListPicker } from "./ListPicker";
 import { downloadCsv } from "./downloadCsv";
 import { errorMessageFor } from "./apiErrors";
 
@@ -78,7 +78,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ lists = [] }: ChatPanelProps) {
-  const [listId, selectList] = useSelectedList(lists);
+  const picker = useListPicker(lists);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -120,7 +120,7 @@ export function ChatPanel({ lists = [] }: ChatPanelProps) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, messages: history, listId }),
+        body: JSON.stringify({ query, messages: history, listId: picker.selectedId }),
       });
       if (!res.ok) setAssistantReply(await errorTextFor(res));
       else if (res.body) await readSseFrames(res.body, makeFrameHandler());
@@ -136,13 +136,13 @@ export function ChatPanel({ lists = [] }: ChatPanelProps) {
     <Panel className="flex flex-1 flex-col gap-4 lg:min-h-[520px]">
       <div className="flex flex-col gap-3">
         <div>
-          <h2 className="font-display text-xl italic text-ink">Find a phrase</h2>
+          <h2 className="font-display text-xl italic text-ink">Ask the guide</h2>
           <p className="mt-1 text-sm text-muted">
             Ask how something is really said — we&apos;ll pull it from the videos you&apos;ve
             added.
           </p>
         </div>
-        <ListPicker lists={lists} selectedId={listId} onSelect={selectList} />
+        <ListPicker picker={picker} />
       </div>
 
       <div className="flex-1 overflow-y-auto rounded-lg border border-line bg-canvas/40 p-3">

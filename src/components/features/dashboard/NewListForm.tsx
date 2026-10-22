@@ -1,34 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { MONO_LABEL, TEXT_INPUT } from "@/components/ui/styles";
-import { MAX_LIST_NAME_LENGTH, validateListName } from "@/lib/list-names";
+import { MAX_LIST_NAME_LENGTH } from "@/lib/list-names";
 import { ActionError } from "./ActionError";
-import { useApiAction } from "./useApiAction";
-
-/** Validates locally first (same rule as the server), then creates the list and clears the field. */
-function useCreateList() {
-  const [name, setName] = useState("");
-  const [localError, setLocalError] = useState<string | null>(null);
-  const { run, state } = useApiAction();
-
-  async function submit(e: React.SyntheticEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const result = validateListName(name);
-    setLocalError("error" in result ? result.error : null);
-    if ("error" in result) return;
-
-    const ok = await run("/api/lists", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: result.name }),
-    });
-    if (ok) setName("");
-  }
-
-  return { name, setName, submit, pending: state.pending, error: localError ?? state.error };
-}
+import { useCreateList } from "./useCreateList";
 
 export function NewListForm() {
   const { name, setName, submit, pending, error } = useCreateList();

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
@@ -39,11 +40,19 @@ async function upsertSessionUser(sessionUser: SessionUser): Promise<AuthedUser> 
   return user;
 }
 
-/** The signed-in user, or null when there is no session. */
-export async function getSessionUser(): Promise<AuthedUser | null> {
-  const session = await auth0.getSession();
-  return session ? upsertSessionUser(session.user) : null;
+/** The Auth0 session, read once per request however many layouts and pages ask for it. */
+export const getSession = cache(() => auth0.getSession());
+
+/** What the app greets a session user as: their name, else their email. */
+export function displayNameFor(sessionUser: SessionUser): string {
+  return sessionUser.name ?? sessionUser.email ?? "there";
 }
+
+/** The signed-in user, or null when there is no session. Cached per request, like getSession. */
+export const getSessionUser = cache(async (): Promise<AuthedUser | null> => {
+  const session = await getSession();
+  return session ? upsertSessionUser(session.user) : null;
+});
 
 /** For API routes: the signed-in user, or a 401 response to return as-is. */
 export async function requireSession(): Promise<AuthedUser | NextResponse> {

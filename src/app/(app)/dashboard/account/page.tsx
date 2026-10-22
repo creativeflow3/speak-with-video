@@ -4,7 +4,7 @@ import { getDashboardUser } from "@/lib/authz";
 import { hasDatabasePassword, loginMethodFor } from "@/lib/auth0-account";
 import { Panel } from "@/components/ui/panel";
 import { MONO_LABEL } from "@/components/ui/styles";
-import { DashboardPageHeader } from "@/components/layout/DashboardPageHeader";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { PasswordResetButton } from "@/components/features/dashboard/PasswordResetButton";
 
 export const metadata: Metadata = { title: "Account" };
@@ -45,7 +45,7 @@ export default async function AccountPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <DashboardPageHeader title="Account" />
+      <PageHeader title="Account" />
       <dl className="flex flex-col gap-4">
         <Field label="Email">{user.email || "—"}</Field>
         <Field label="Signs in with">{loginMethodFor(user.auth0Sub)}</Field>

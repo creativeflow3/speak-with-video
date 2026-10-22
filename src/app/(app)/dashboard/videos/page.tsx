@@ -4,7 +4,7 @@ import { getDashboardUser } from "@/lib/authz";
 import { SUPPORTED_LANGUAGES } from "@/lib/languages";
 import { listOwnedVideos, type OwnedVideo } from "@/services/ingest.service";
 import { MONO_LABEL, TEXT_LINK } from "@/components/ui/styles";
-import { DashboardPageHeader } from "@/components/layout/DashboardPageHeader";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { pluralize } from "@/lib/utils";
 import { formatDate } from "@/components/features/dashboard/format";
 
@@ -59,7 +59,7 @@ export default async function VideosPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <DashboardPageHeader
+      <PageHeader
         title="Videos"
         description="Videos you added. A video someone else added first stays in their list, even if you submitted it too."
       />

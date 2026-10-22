@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { getDashboardUser } from "@/lib/authz";
 import { getListWithItems, ListNotFoundError, type AnkiListItem, type AnkiListRef } from "@/lib/anki-list";
 import { MONO_LABEL, TEXT_LINK } from "@/components/ui/styles";
-import { DashboardPageHeader } from "@/components/layout/DashboardPageHeader";
+import { PageHeader } from "@/components/layout/PageHeader";
 import {
   ClearListButton,
   DeleteListButton,
@@ -45,7 +45,7 @@ function EmptyList() {
     <p className="py-10 text-center text-sm text-muted">
       No words yet. Pick this list in{" "}
       <Link href="/" className={`text-ink underline ${TEXT_LINK}`}>
-        Find a phrase
+        Find a Phrase
       </Link>{" "}
       and ask to add a word.
     </p>
@@ -62,7 +62,7 @@ export default async function ListPage({ params }: PageProps<"/dashboard/lists/[
       <Link href="/dashboard/lists" className={`self-start ${MONO_LABEL} ${TEXT_LINK}`}>
         ← All lists
       </Link>
-      <DashboardPageHeader
+      <PageHeader
         title={list.name}
         description={pluralize(items.length, "word")}
         actions={<DownloadListButton listName={list.name} cards={items} />}
