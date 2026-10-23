@@ -1,0 +1,1 @@
+CREATE INDEX "videos_owner_id_created_at_id_idx" ON "videos" USING btree ("owner_id","created_at","id");

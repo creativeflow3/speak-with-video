@@ -7,7 +7,7 @@ import {
   markVideoFailed,
   markVideoSucceeded,
   recordTranscriptApiUsage,
-  listOwnedVideos,
+  listOwnedVideosPage,
   type Video,
 } from "./ingest.service";
 
@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   select: vi.fn(),
   insert: vi.fn(),
   update: vi.fn(),
+  $count: vi.fn(),
   insertVideosValues: vi.fn(() => Promise.resolve(undefined)),
   insertUsageValues: vi.fn(() => Promise.resolve(undefined)),
   updateSet: vi.fn(() => ({ where: () => Promise.resolve(undefined) })),
@@ -129,21 +130,36 @@ describe("recordTranscriptApiUsage", () => {
   });
 });
 
-describe("listOwnedVideos", () => {
-  it("selects only the dashboard's columns for the owner, newest first", async () => {
-    const rows = [{ id: "v1", title: "Episode 1", status: "succeeded" }];
-    const select = vi.fn(() => ({
-      from: () => ({ where: () => ({ orderBy: () => Promise.resolve(rows) }) }),
+describe("listOwnedVideosPage", () => {
+  const rows = [{ id: "v1", title: "Episode 1", status: "succeeded" }];
+  const limit = vi.fn();
+  const offset = vi.fn(() => Promise.resolve(rows));
+
+  beforeEach(() => {
+    limit.mockReset().mockReturnValue({ offset });
+    offset.mockClear();
+    mocks.select.mockImplementation(() => ({
+      from: () => ({ where: () => ({ orderBy: () => ({ limit }) }) }),
     }));
-    mocks.select.mockImplementation(select);
+    mocks.$count.mockReset().mockResolvedValue(115);
+  });
 
-    const result = await listOwnedVideos("user-1");
+  it("selects only the dashboard's columns, and returns the page with the owner's total", async () => {
+    const result = await listOwnedVideosPage("user-1", { page: 1, limit: 10 });
 
-    expect(result).toEqual(rows);
-    const columns = Object.keys((select.mock.calls[0] as unknown[])[0] as object);
+    expect(result).toEqual({ videos: rows, total: 115 });
+    expect(mocks.$count).toHaveBeenCalledWith(videos, expect.anything());
+    const columns = Object.keys((mocks.select.mock.calls[0] as unknown[])[0] as object);
     expect(columns).toEqual([
       "id", "title", "channel", "language", "status", "failureReason",
       "chunkCount", "visibility", "youtubeUrl", "createdAt",
     ]);
+  });
+
+  it("skips the earlier pages' rows", async () => {
+    await listOwnedVideosPage("user-1", { page: 3, limit: 25 });
+
+    expect(limit).toHaveBeenCalledWith(25);
+    expect(offset).toHaveBeenCalledWith(50);
   });
 });

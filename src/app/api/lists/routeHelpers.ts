@@ -5,7 +5,7 @@ import {
   InvalidListNameError,
   ListNotFoundError,
 } from "@/lib/anki-list";
-import { logRouteError } from "@/lib/logger";
+import { serverErrorResponse } from "../serverError";
 
 // Someone else's list maps to 404 (not 403), so the response doesn't confirm it exists.
 const ERROR_STATUS: [new (...args: never[]) => Error, number][] = [
@@ -20,6 +20,5 @@ export function listErrorResponse(err: unknown, route: string): NextResponse {
   const match = ERROR_STATUS.find(([ErrorClass]) => err instanceof ErrorClass);
   if (match) return NextResponse.json({ error: (err as Error).message }, { status: match[1] });
 
-  logRouteError(route, err);
-  return NextResponse.json({ error: "Something went wrong. Try again." }, { status: 500 });
+  return serverErrorResponse(route, err);
 }

@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { FOCUS_RING, TEXT_LINK } from "@/components/ui/styles";
+import { SELECT_INPUT, TEXT_LINK } from "@/components/ui/styles";
 // Type-only, so none of the server-side list code reaches the client bundle.
 import type { AnkiListRef as ListOption } from "@/lib/anki-list";
 import { NewListInline } from "./NewListInline";
@@ -82,7 +82,7 @@ export function ListPicker({ picker }: { picker: ListPickerState }) {
         id="chat-list-picker"
         value={selectedId}
         onChange={(e) => select(e.target.value)}
-        className={`max-w-[12rem] truncate rounded-md border border-line bg-surface px-2 py-1 font-sans text-sm normal-case tracking-normal text-ink ${FOCUS_RING}`}
+        className={`max-w-[12rem] truncate ${SELECT_INPUT}`}
       >
         {lists.map((list) => (
           <option key={list.id} value={list.id}>

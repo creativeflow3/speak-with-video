@@ -29,7 +29,7 @@ export const videos = pgTable("videos", {
   ownerId: uuid("owner_id").references(() => users.id),
   visibility: videoVisibility("visibility").notNull().default("private"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [index("videos_owner_id_created_at_id_idx").on(table.ownerId, table.createdAt, table.id)]);
 
 export const transcriptApiUsage = pgTable("transcript_api_usage", {
   id: uuid("id").primaryKey().defaultRandom(),

@@ -9,4 +9,7 @@ export const MONO_LABEL = "font-mono text-xs uppercase tracking-widest text-mute
 /** The wide-tracked brand eyebrow ("Real phrases, real videos") above the app name. */
 export const EYEBROW = "font-mono text-xs uppercase tracking-[0.2em] text-muted";
 
+/** A compact <select> that sits inside a MONO_LABEL row, resetting the row's uppercase tracking. */
+export const SELECT_INPUT = `rounded-md border border-line bg-surface px-2 py-1 font-sans text-sm normal-case tracking-normal text-ink ${FOCUS_RING}`;
+
 export const TEXT_INPUT = `rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-ink ${FOCUS_RING}`;
