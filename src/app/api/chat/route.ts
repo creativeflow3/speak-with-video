@@ -4,7 +4,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { checkGuardrails } from "@/lib/guardrails";
 import { toolDispatcher, type ChatTurnInput } from "@/lib/tool-dispatcher";
 import { sseEvent } from "@/lib/utils";
-import type { CsvExport, ToolContext } from "@/lib/tools/context";
+import type { CsvExport, ToolContext } from "@/lib/tools";
 import type { ChatRequestBody } from "@/types";
 
 const MAX_HISTORY_MESSAGES = 20;
