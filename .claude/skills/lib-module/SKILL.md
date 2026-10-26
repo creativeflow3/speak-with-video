@@ -69,9 +69,6 @@ defeats the barrel and is the mistake the legacy folders below made.
 ## Legacy exceptions — don't copy these
 
 A few older folders predate this convention and are missing a barrel, so
-consumers reach into their files directly: `lib/tools`, `lib/transcript`,
-`lib/anki`, `lib/anki-list`, `lib/evals`. `lib/tools` is also a deliberate
-grab-bag of independent tool implementations rather than one capability, so it
-won't fully fit this shape even if barreled. Don't force a migration of these
+consumers reach into their files directly: `lib/transcript`, `lib/evals`. Don't force a migration of these
 uninvited — but any new file added to one of them, or any new lib folder,
 should follow the standard shape above.
